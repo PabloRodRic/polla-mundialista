@@ -1,0 +1,62 @@
+{
+  "_description": "Single source of truth for all prediction scoring (src/config/scoring.json). Change values here and both the rules page and scoring engine will update automatically.",
+
+  "groupStage": {
+    "matchResult": {
+      "correctOutcome": 1,
+      "correctOutcomeAndGoalDifference": 2,
+      "exactScore": 3
+    },
+    "finalStandings": {
+      "correct1stPlace": 4,
+      "correct2ndPlace": 3,
+      "correct3rdPlace": 1,
+      "correct4thPlace": 1
+    }
+  },
+
+  "knockout": {
+    "teamAdvancement": {
+      "roundOf32": 2,
+      "roundOf16": 4,
+      "quarterfinals": 6,
+      "semifinals": 8,
+      "final": 12
+    },
+    "preTournamentMatchResult": {
+      "roundOf32":      { "correctOutcome": 1, "correctOutcomeAndGoalDifference": 2, "exactScore": 3 },
+      "roundOf16":      { "correctOutcome": 2, "correctOutcomeAndGoalDifference": 3, "exactScore": 5 },
+      "quarterfinals":  { "correctOutcome": 3, "correctOutcomeAndGoalDifference": 4, "exactScore": 6 },
+      "semifinals":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 7 },
+      "thirdPlace":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 7 },
+      "final":          { "correctOutcome": 5, "correctOutcomeAndGoalDifference": 6, "exactScore": 8 }
+    },
+    "liveMatchResult": {
+      "_note": "Flat scoring — same for every knockout round",
+      "correctOutcome": 1,
+      "correctOutcomeAndGoalDifference": 2,
+      "exactScore": 3
+    }
+  },
+
+  "tournamentOutcome": {
+    "correctChampion": 20,
+    "correctRunnerUp": 15,
+    "correct3rdPlace": 10
+  },
+
+  "individualAwards": {
+    "goldenBoot": 5,
+    "goldenBall": 5
+  },
+
+  "liveMatchTiming": {
+    "opensBeforeKickoffHours": 24,
+    "locksBeforeKickoffHours": 1
+  },
+
+  "scoreSync": {
+    "pollIntervalMatchDayMinutes": 5,
+    "pollIntervalOffDayMinutes": 60
+  }
+}
