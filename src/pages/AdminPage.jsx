@@ -1,62 +1,64 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from '../contexts/AuthContext';
 import {
-  collection, query, orderBy, onSnapshot,
-  doc, updateDoc, Timestamp,
-} from 'firebase/firestore'
-import { db } from '../config/firebase'
-import { useAuth } from '../contexts/AuthContext'
-import {
-  syncMatchesFromAPI, onSyncStatusChange, stopAutoSync, startAutoSync,
-  calculatePointsForMatch, getSyncStatus,
-} from '../services/matchSync'
-import { hasApiKey } from '../services/footballApi'
+  syncMatchesFromAPI,
+  onSyncStatusChange,
+  stopAutoSync,
+  startAutoSync,
+  calculatePointsForMatch,
+  getSyncStatus,
+} from '../services/matchSync';
+import { hasApiKey } from '../services/footballApi';
 
 function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
   return (
     <div
-      className="rounded-xl p-4 mb-4"
+      className='rounded-xl p-4 mb-4'
       style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
     >
-      <h2 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--color-gold)' }}>
+      <h2 className='text-xs font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-gold)' }}>
         Estado del Sync
       </h2>
 
-      <div className="space-y-2 text-sm mb-4">
-        <div className="flex justify-between">
+      <div className='space-y-2 text-sm mb-4'>
+        <div className='flex justify-between'>
           <span style={{ color: 'var(--color-text-muted)' }}>API Key</span>
           <span style={{ color: hasApiKey() ? '#4ade80' : 'var(--color-accent-red)' }}>
             {hasApiKey() ? '✓ Configurada' : '✗ No configurada'}
           </span>
         </div>
-        <div className="flex justify-between">
+        <div className='flex justify-between'>
           <span style={{ color: 'var(--color-text-muted)' }}>Último sync</span>
           <span style={{ color: 'var(--color-text-secondary)' }}>
-            {syncStatus.lastSync
-              ? new Date(syncStatus.lastSync).toLocaleTimeString('es')
-              : 'Nunca'}
+            {syncStatus.lastSync ? new Date(syncStatus.lastSync).toLocaleTimeString('es') : 'Nunca'}
           </span>
         </div>
-        <div className="flex justify-between">
+        <div className='flex justify-between'>
           <span style={{ color: 'var(--color-text-muted)' }}>Partidos sincronizados</span>
           <span style={{ color: 'var(--color-text-secondary)' }}>{syncStatus.matchCount || 0}</span>
         </div>
-        <div className="flex justify-between">
+        <div className='flex justify-between'>
           <span style={{ color: 'var(--color-text-muted)' }}>Auto-sync</span>
           <span style={{ color: autoPaused ? 'var(--color-accent-red)' : '#4ade80' }}>
             {autoPaused ? 'Pausado' : 'Activo'}
           </span>
         </div>
         {syncStatus.error && (
-          <p className="text-xs mt-2 p-2 rounded" style={{ background: 'rgba(231,76,60,0.1)', color: 'var(--color-accent-red)' }}>
+          <p
+            className='text-xs mt-2 p-2 rounded'
+            style={{ background: 'rgba(231,76,60,0.1)', color: 'var(--color-accent-red)' }}
+          >
             Error: {syncStatus.error}
           </p>
         )}
       </div>
 
-      <div className="flex gap-2">
+      <div className='flex gap-2'>
         <button
           onClick={onToggleAuto}
-          className="flex-1 py-2 rounded-lg text-xs font-medium transition-colors"
+          className='flex-1 py-2 rounded-lg text-xs font-medium transition-colors'
           style={{
             background: 'var(--color-surface)',
             color: 'var(--color-text-secondary)',
@@ -67,81 +69,81 @@ function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 function MatchOverrideCard({ match, onSave }) {
-  const [scoreA, setScoreA] = useState(match.scoreA ?? '')
-  const [scoreB, setScoreB] = useState(match.scoreB ?? '')
-  const [status, setStatus] = useState(match.status)
-  const [saving, setSaving] = useState(false)
+  const [scoreA, setScoreA] = useState(match.scoreA ?? '');
+  const [scoreB, setScoreB] = useState(match.scoreB ?? '');
+  const [status, setStatus] = useState(match.status);
+  const [saving, setSaving] = useState(false);
 
   async function handleSave() {
-    setSaving(true)
+    setSaving(true);
     try {
-      const matchRef = doc(db, 'matches', match.id)
+      const matchRef = doc(db, 'matches', match.id);
       const updates = {
         status,
         lastSyncedAt: Timestamp.now(),
         pointsCalculated: false,
-      }
+      };
       if (scoreA !== '' && scoreB !== '') {
-        updates.scoreA = Number(scoreA)
-        updates.scoreB = Number(scoreB)
+        updates.scoreA = Number(scoreA);
+        updates.scoreB = Number(scoreB);
       }
-      await updateDoc(matchRef, updates)
+      await updateDoc(matchRef, updates);
 
       if (status === 'finished' && scoreA !== '' && scoreB !== '') {
-        await calculatePointsForMatch(match.id, Number(scoreA), Number(scoreB), match.stage)
+        await calculatePointsForMatch(match.id, Number(scoreA), Number(scoreB), match.stage);
       }
-      onSave?.()
+      onSave?.();
     } catch (err) {
-      console.error('Error saving override:', err)
+      console.error('Error saving override:', err);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <div
-      className="rounded-xl p-4 mb-3"
+      className='rounded-xl p-4 mb-3'
       style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
     >
-      <div className="flex items-start justify-between mb-3 gap-2">
+      <div className='flex items-start justify-between mb-3 gap-2'>
         <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+          <p className='text-sm font-semibold' style={{ color: 'var(--color-text-primary)' }}>
             {match.tlaA || match.teamA} vs {match.tlaB || match.teamB}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          <p className='text-xs mt-0.5' style={{ color: 'var(--color-text-muted)' }}>
             {match.stage === 'group' ? `Grupo ${match.group} · J${match.matchday}` : match.stage}
           </p>
         </div>
         <select
           value={status}
-          onChange={e => setStatus(e.target.value)}
-          className="text-xs rounded-lg px-2 py-1 border-0 outline-none"
+          onChange={(e) => setStatus(e.target.value)}
+          className='text-xs rounded-lg px-2 py-1 border-0 outline-none'
           style={{
             background: 'var(--color-surface)',
             color: 'var(--color-text-secondary)',
             border: '1px solid var(--color-border)',
           }}
         >
-          <option value="upcoming">Próximo</option>
-          <option value="live">En Vivo</option>
-          <option value="finished">Finalizado</option>
-          <option value="cancelled">Cancelado</option>
+          <option value='upcoming'>Próximo</option>
+          <option value='live'>En Vivo</option>
+          <option value='finished'>Finalizado</option>
+          <option value='cancelled'>Cancelado</option>
         </select>
       </div>
 
-      <div className="flex items-center gap-3 mb-3">
+      <div className='flex items-center gap-3 mb-3'>
         <input
-          type="number"
-          min="0"
-          max="99"
-          placeholder="0"
+          type='number'
+          min='0'
+          max='99'
+          placeholder='0'
           value={scoreA}
-          onChange={e => setScoreA(e.target.value)}
-          className="w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none"
+          onChange={(e) => setScoreA(e.target.value)}
+          className='w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none'
           style={{
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
@@ -150,20 +152,20 @@ function MatchOverrideCard({ match, onSave }) {
         />
         <span style={{ color: 'var(--color-text-muted)' }}>–</span>
         <input
-          type="number"
-          min="0"
-          max="99"
-          placeholder="0"
+          type='number'
+          min='0'
+          max='99'
+          placeholder='0'
           value={scoreB}
-          onChange={e => setScoreB(e.target.value)}
-          className="w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none"
+          onChange={(e) => setScoreB(e.target.value)}
+          className='w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none'
           style={{
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             color: 'var(--color-text-primary)',
           }}
         />
-        <span className="text-xs ml-1" style={{ color: 'var(--color-text-muted)' }}>
+        <span className='text-xs ml-1' style={{ color: 'var(--color-text-muted)' }}>
           (solo 90 min)
         </span>
       </div>
@@ -171,7 +173,7 @@ function MatchOverrideCard({ match, onSave }) {
       <button
         onClick={handleSave}
         disabled={saving}
-        className="w-full py-2 rounded-lg text-sm font-semibold transition-opacity"
+        className='w-full py-2 rounded-lg text-sm font-semibold transition-opacity'
         style={{
           background: 'var(--color-pitch)',
           color: 'var(--color-text-primary)',
@@ -181,82 +183,85 @@ function MatchOverrideCard({ match, onSave }) {
         {saving ? 'Guardando...' : 'Guardar resultado'}
       </button>
     </div>
-  )
+  );
 }
 
 export default function AdminPage() {
-  const { profile } = useAuth()
-  const [matches, setMatches] = useState([])
-  const [syncStatus, setSyncStatus] = useState(getSyncStatus())
-  const [syncing, setSyncing] = useState(false)
-  const [autoPaused, setAutoPaused] = useState(false)
-  const [matchFilter, setMatchFilter] = useState('all')
-  const [toast, setToast] = useState(null)
+  const { profile } = useAuth();
+  const [matches, setMatches] = useState([]);
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus());
+  const [syncing, setSyncing] = useState(false);
+  const [autoPaused, setAutoPaused] = useState(false);
+  const [matchFilter, setMatchFilter] = useState('all');
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const unsub = onSyncStatusChange(setSyncStatus)
-    return unsub
-  }, [])
+    const unsub = onSyncStatusChange(setSyncStatus);
+    return unsub;
+  }, []);
 
   useEffect(() => {
-    const q = query(collection(db, 'matches'), orderBy('date', 'asc'))
-    const unsub = onSnapshot(q, snap => {
-      const data = []
-      snap.forEach(d => data.push({ id: d.id, ...d.data() }))
-      setMatches(data)
-    })
-    return unsub
-  }, [])
+    const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = [];
+      snap.forEach((d) => data.push({ id: d.id, ...d.data() }));
+      setMatches(data);
+    });
+    return unsub;
+  }, []);
 
   function showToast(msg, type = 'success') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
   }
 
   async function handleManualSync() {
     if (!hasApiKey()) {
-      showToast('Falta VITE_FOOTBALL_DATA_API_KEY en .env', 'error')
-      return
+      showToast('Falta VITE_FOOTBALL_DATA_API_KEY en .env', 'error');
+      return;
     }
-    setSyncing(true)
+    setSyncing(true);
     try {
-      const count = await syncMatchesFromAPI()
-      showToast(`Sync exitoso: ${count} partidos actualizados`)
+      const count = await syncMatchesFromAPI();
+      showToast(`Sync exitoso: ${count} partidos actualizados`);
     } catch (err) {
-      showToast(`Error de sync: ${err.message}`, 'error')
+      showToast(`Error de sync: ${err.message}`, 'error');
     } finally {
-      setSyncing(false)
+      setSyncing(false);
     }
   }
 
   function handleToggleAuto() {
     if (autoPaused) {
-      startAutoSync(true)
-      setAutoPaused(false)
+      startAutoSync(true);
+      setAutoPaused(false);
     } else {
-      stopAutoSync()
-      setAutoPaused(true)
+      stopAutoSync();
+      setAutoPaused(true);
     }
   }
 
   if (!profile?.isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]" style={{ color: 'var(--color-text-muted)' }}>
-        <p className="text-4xl mb-3">🔒</p>
-        <p className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Acceso denegado</p>
-        <p className="text-sm mt-1">Solo administradores pueden acceder a este panel.</p>
+      <div
+        className='flex flex-col items-center justify-center min-h-[60vh]'
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        <p className='text-4xl mb-3'>🔒</p>
+        <p className='font-semibold' style={{ color: 'var(--color-text-secondary)' }}>
+          Acceso denegado
+        </p>
+        <p className='text-sm mt-1'>Solo administradores pueden acceder a este panel.</p>
       </div>
-    )
+    );
   }
 
-  const filtered = matchFilter === 'all'
-    ? matches
-    : matches.filter(m => m.status === matchFilter)
+  const filtered = matchFilter === 'all' ? matches : matches.filter((m) => m.status === matchFilter);
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-4">
+    <div className='max-w-lg mx-auto px-4 pt-4'>
       <h1
-        className="text-xl font-bold mb-4"
+        className='text-xl font-bold mb-4'
         style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
       >
         ⚙️ Panel Admin
@@ -265,7 +270,7 @@ export default function AdminPage() {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-xl"
+          className='fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-xl'
           style={{
             background: toast.type === 'error' ? 'var(--color-accent-red)' : 'var(--color-pitch)',
             color: '#fff',
@@ -278,12 +283,15 @@ export default function AdminPage() {
       {/* API Key warning */}
       {!hasApiKey() && (
         <div
-          className="rounded-xl p-4 mb-4 text-sm"
-          style={{ background: 'rgba(231,76,60,0.1)', border: '1px solid var(--color-accent-red)', color: 'var(--color-accent-red)' }}
+          className='rounded-xl p-4 mb-4 text-sm'
+          style={{
+            background: 'rgba(231,76,60,0.1)',
+            border: '1px solid var(--color-accent-red)',
+            color: 'var(--color-accent-red)',
+          }}
         >
-          <strong>API Key no configurada.</strong> Agrega{' '}
-          <code className="text-xs">VITE_FOOTBALL_DATA_API_KEY</code> a tu archivo{' '}
-          <code className="text-xs">.env</code> para habilitar la sincronización.
+          <strong>API Key no configurada.</strong> Agrega <code className='text-xs'>VITE_FOOTBALL_DATA_API_KEY</code> a
+          tu archivo <code className='text-xs'>.env</code> para habilitar la sincronización.
         </div>
       )}
 
@@ -291,7 +299,7 @@ export default function AdminPage() {
       <button
         onClick={handleManualSync}
         disabled={syncing || syncStatus.syncing}
-        className="w-full py-3 rounded-xl font-semibold mb-4 transition-opacity"
+        className='w-full py-3 rounded-xl font-semibold mb-4 transition-opacity'
         style={{
           background: 'var(--color-gold)',
           color: '#111318',
@@ -303,31 +311,24 @@ export default function AdminPage() {
       </button>
 
       {/* Status card */}
-      <StatusCard
-        syncStatus={syncStatus}
-        autoPaused={autoPaused}
-        onToggleAuto={handleToggleAuto}
-      />
+      <StatusCard syncStatus={syncStatus} autoPaused={autoPaused} onToggleAuto={handleToggleAuto} />
 
       {/* Manual overrides */}
-      <h2
-        className="text-sm font-bold uppercase tracking-wider mb-3"
-        style={{ color: 'var(--color-text-muted)' }}
-      >
+      <h2 className='text-sm font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-text-muted)' }}>
         Ajuste Manual de Resultados
       </h2>
 
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+      <div className='flex gap-2 mb-4 overflow-x-auto pb-1'>
         {[
-          { value: 'all',      label: 'Todos' },
-          { value: 'live',     label: 'En Vivo' },
+          { value: 'all', label: 'Todos' },
+          { value: 'live', label: 'En Vivo' },
           { value: 'upcoming', label: 'Próximos' },
           { value: 'finished', label: 'Finalizados' },
-        ].map(f => (
+        ].map((f) => (
           <button
             key={f.value}
             onClick={() => setMatchFilter(f.value)}
-            className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+            className='shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors'
             style={{
               background: matchFilter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
               color: matchFilter === f.value ? '#111318' : 'var(--color-text-secondary)',
@@ -340,22 +341,16 @@ export default function AdminPage() {
       </div>
 
       {matches.length === 0 ? (
-        <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
+        <div className='text-center py-8' style={{ color: 'var(--color-text-muted)' }}>
           <p>Sin partidos. Sincroniza primero.</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-8" style={{ color: 'var(--color-text-muted)' }}>
+        <div className='text-center py-8' style={{ color: 'var(--color-text-muted)' }}>
           <p>Sin partidos con este filtro.</p>
         </div>
       ) : (
-        filtered.map(m => (
-          <MatchOverrideCard
-            key={m.id}
-            match={m}
-            onSave={() => showToast('Resultado guardado')}
-          />
-        ))
+        filtered.map((m) => <MatchOverrideCard key={m.id} match={m} onSave={() => showToast('Resultado guardado')} />)
       )}
     </div>
-  )
+  );
 }

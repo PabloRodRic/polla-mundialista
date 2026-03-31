@@ -44,7 +44,7 @@ export default function Layout() {
           className='text-sm font-semibold tracking-widest uppercase'
           style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
         >
-          Polla 2026 - Los Rodriguez
+          Polla 2026
         </span>
 
         <div className='relative'>
@@ -79,7 +79,7 @@ export default function Layout() {
                 <div style={{ borderTop: '1px solid var(--color-border)' }} />
                 <button
                   onClick={handleLogout}
-                  className='w-full text-left px-4 py-2 transition-colors hover:bg-[var(--color-surface-hover)]'
+                  className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
                   style={{ color: 'var(--color-accent-red)' }}
                 >
                   Cerrar sesión
