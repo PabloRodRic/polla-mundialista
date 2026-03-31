@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/football-api/:path*", "destination": "/api/football-proxy?path=:path*" }
+    { "source": "/football-api/:path*", "destination": "/api/football-proxy/:path*" }
   ]
 }
