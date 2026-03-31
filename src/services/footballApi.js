@@ -6,14 +6,11 @@
 const isDev = import.meta.env.DEV;
 
 // Dev  → Vite proxy (avoids CORS)
-// Prod → direct call (football-data.org allows real domains)
-const API_BASE = isDev ? '/football-api' : 'https://api.football-data.org/v4';
-
-const API_KEY = import.meta.env.VITE_FOOTBALL_DATA_API_KEY || '';
+// Prod → Vercel proxy (avoids CORS + hides API key)
+const API_BASE = isDev ? '/football-api' : 'https://polla-proxy.vercel.app/football-api';
 
 async function apiFetch(path) {
-  const headers = isDev ? {} : { 'X-Auth-Token': API_KEY };
-  const res = await fetch(`${API_BASE}${path}`, { headers });
+  const res = await fetch(`${API_BASE}${path}`);
   if (!res.ok) throw new Error(`Football API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -34,5 +31,5 @@ export async function fetchTeams() {
 }
 
 export function hasApiKey() {
-  return Boolean(API_KEY);
+  return true;
 }
