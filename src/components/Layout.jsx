@@ -2,12 +2,17 @@ import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { startAutoSync, stopAutoSync } from '../services/matchSync';
+import LeaderboardIcon from '../assets/leaderboard.svg?react';
+import MatchesIcon from '../assets/matches.svg?react';
+import PredictionsIcon from '../assets/predictions.svg?react';
+import RulesIcon from '../assets/rules.svg?react';
+import AdminIcon from '../assets/admin.svg?react';
 
 const NAV_TABS = [
-  { path: '/matches', icon: '⚽', label: 'Partidos' },
-  { path: '/predictions', icon: '📝', label: 'Predicciones' },
-  { path: '/leaderboard', icon: '🏆', label: 'Tabla' },
-  { path: '/rules', icon: '📜', label: 'Reglas' },
+  { path: '/matches', icon: MatchesIcon, label: 'Partidos' },
+  { path: '/predictions', icon: PredictionsIcon, label: 'Predicciones' },
+  { path: '/leaderboard', icon: LeaderboardIcon, label: 'Tabla' },
+  { path: '/rules', icon: RulesIcon, label: 'Reglas' },
 ];
 
 export default function Layout() {
@@ -23,7 +28,7 @@ export default function Layout() {
     }
   }, [profile?.isAdmin]);
 
-  const tabs = profile?.isAdmin ? [...NAV_TABS, { path: '/admin', icon: '⚙️', label: 'Admin' }] : NAV_TABS;
+  const tabs = profile?.isAdmin ? [...NAV_TABS, { path: '/admin', icon: AdminIcon, label: 'Admin' }] : NAV_TABS;
 
   async function handleLogout() {
     await logout();
@@ -111,11 +116,14 @@ export default function Layout() {
             to={tab.path}
             className='flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors'
             style={({ isActive }) => ({
-              color: isActive ? 'var(--color-gold)' : 'var(--color-text-muted)',
+              color: isActive ? '#111318' : 'var(--color-text-muted)',
+              backgroundColor: isActive ? 'var(--color-gold)' : 'transparent',
             })}
           >
-            <span className='text-lg leading-none'>{tab.icon}</span>
-            <span className='text-[10px] font-medium'>{tab.label}</span>
+            <tab.icon className='w-5 h-5' style={{ color: 'currentColor' }} />
+            <span className='text-[12px] font-medium' style={{ color: 'currentColor' }}>
+              {tab.label}
+            </span>
           </NavLink>
         ))}
       </nav>
