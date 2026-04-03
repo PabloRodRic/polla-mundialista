@@ -121,7 +121,7 @@ This mode exists so that **every user can participate in knockout matches even i
 
 #### How it works
 
-- Live predictions become available **`liveMatchTiming.opensBeforeKickoffHours` hours before** each knockout match.
+- Live predictions become available **when both teams for the match are confirmed** (i.e., once the previous round's matchups are decided). The `liveMatchTiming.opensBeforeKickoffHours` config key exists but is not currently used as a time gate — team confirmation is the actual trigger.
 - Live predictions **lock `liveMatchTiming.locksBeforeKickoffHours` hour(s) before** kickoff. No changes after that.
 - Available for **every** knockout match: Round of 32, Round of 16, Quarterfinals, Semifinals, 3rd-Place Match, and the Final.
 - The user predicts the final score after 90 minutes, same as pre-tournament.
@@ -147,7 +147,7 @@ A user **can earn points from both modes** on the same match. If their pre-tourn
 ### What counts as the result
 
 - **Group stage:** Score at full time (90 minutes + stoppage time).
-- **Knockout stage:** Score at the end of 90 minutes only. **Extra time and penalties do NOT change the score** for prediction purposes. If a match is level after 90 minutes, the prediction result is a **draw (X)**.
+- **Knockout stage:** Score at the end of 90 minutes **plus extra time**. Penalty shootout goals do **not** count. If a match is still level after extra time (e.g. 2-2 after 120 min), the prediction result is a **draw (X)**, and the user's tiebreaker pick (penalties winner) determines bracket advancement without affecting the score tiers.
 
 ### Prediction deadlines
 

@@ -68,6 +68,7 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] Enter scores for a match → card border turns green (pitch color)
 - [ ] Winning side gets gold highlight, losing side is normal
 - [ ] Draw → both sides get subtle blue highlight
+- [ ] Enter score of **0** (zero) on one side → it is saved and shown correctly, not treated as null/empty
 - [ ] "Guardando..." appears top-right while saving, then disappears
 - [ ] Scores persist after page reload (saved to Firestore)
 - [ ] Inputs are disabled when tournament is locked (first match date has passed)
@@ -78,17 +79,20 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] 🥇 badge on 1st place, 🥈 on 2nd
 - [ ] ✦ (blue) badge on best 3rd place teams — requires entering scores for multiple groups
 - [ ] Goal difference and goals for used as tiebreakers
+- [ ] **Draw GD tiebreaker**: two teams both predicted with draws (same pts) — team with better GF ranks higher
 
 ### 3c. Best 3rd place logic
 - Enter results for all groups to populate 3rd-place standings
 - The top 8 third-place teams (by pts → gd → gf) should get the ✦ badge
 - These 8 teams should populate `bp1–bp8` slots in the Round of 32
+- **Edge**: enter results for fewer than 8 groups → only those 3rd-place teams rank, no crash
 
 ### 3d. Match card layout
 - [ ] Each card shows: `Jornada X · día, DD mes HH:MM` on top row
 - [ ] Real score shown top-right when match is `finished` or `live`
-- [ ] Live matches show `🔴` prefix on score
+- [ ] Live matches show `🔴 En vivo:` prefix on score
 - [ ] Card size is consistent across all group cards
+- [ ] Cancelled matches appear faded (opacity 0.5), inputs disabled
 
 ---
 
@@ -105,6 +109,7 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] Cannot click a team to pick winner unless scores are tied
 - [ ] "Guardando..." appears when saving knockout scores
 - [ ] Winner cascades to the next round (R16 slot populates automatically)
+- [ ] **Tiebreaker cascade**: when scores are tied, the tiebreaker pick (penalties winner) — not the score — determines which team advances to the next round
 
 ### 4c. Round progression
 - [ ] R16 tab locked with warning until all R32 picks are complete
@@ -116,6 +121,7 @@ The app reads from the `matches` collection. To test without the real football A
 - Change the first group match date in Firestore to a past timestamp
 - [ ] All inputs should become disabled
 - [ ] Lock icon (🔒) should appear on knockout cards
+- [ ] Awards section inputs also disabled
 
 ---
 
@@ -134,13 +140,16 @@ The app reads from the `matches` collection. To test without the real football A
 ### 6a. Availability logic
 - Create a knockout match in Firestore **with** `tlaA` and `tlaB` set → should appear with enabled inputs
 - Create one **without** teams → card shows "Disponible cuando se definan los equipos" with disabled inputs
+- The available gate is **team confirmation**, not a time window — adding teams to a Firestore doc should immediately enable the card without changing the date
 
 ### 6b. Lock timing
-- Set a match date to 30 minutes from now (via Firestore) → inputs should be disabled with 🔒
-- Set date to 2 hours from now → inputs should be enabled
+- Set a match date to **30 minutes from now** (via Firestore) → inputs should be disabled with 🔒
+- Set date to **2 hours from now** → inputs should be enabled
+- **Note (dev):** `isLiveLocked` in `PredictionsPage.jsx` hardcodes `1 * 60 * 60 * 1000`. If `liveMatchTiming.locksBeforeKickoffHours` is changed in `scoring.json`, the lock timing in code will NOT update automatically — it requires a code change too.
 
 ### 6c. Filter tabs
 - **Próximos**: shows only matches from the current/next knockout stage (e.g. only R32 until all R32 are done, then only R16)
+- **Stage transition**: mark all R32 matches as `finished` → Próximos should automatically switch to showing R16 matches
 - **Finalizados**: shows only matches with `status: "finished"`
 - **Todos**: shows all knockout matches regardless of state
 
@@ -149,10 +158,19 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] Score persists after reload
 - [ ] Real score shown on finished matches
 - [ ] Points badge shown on finished matches that have scored predictions
+- [ ] Enter score **0–0** → saved correctly, not treated as empty
+- [ ] Clear one input (leave it blank) → both sides written as null to Firestore (prediction cleared, not partial)
 
 ### 6e. Pending badge
 - [ ] Red badge in header shows count of available matches with no prediction yet
 - [ ] Badge disappears when all available matches have predictions
+- [ ] Locked matches are not counted in pending (lock happens 1h before kickoff)
+
+### 6f. Stacking — pre-tournament + live on same match
+1. In the Fixture page, enter a bracket pick for a knockout match (team A vs team B, score X-Y).
+2. In the Predictions page, also enter a live prediction for the same match.
+3. Admin marks the match finished and calculates points.
+4. Verify: the user earns points from **both** predictions independently (pre-tournament bracket result + live match result both contribute to `totalPoints`).
 
 ---
 
@@ -162,6 +180,9 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] 🥇🥈🥉 medals for top 3
 - [ ] Current user row highlighted in gold tint with "(tú)" label
 - [ ] "Estás en el puesto #X de Y jugadores" subtitle
+
+### Two users with identical points
+- Give two users the exact same `totalPoints` in Firestore → both should display with the same rank number, no crash
 
 ### Position change arrows
 1. Note everyone's current rank in the leaderboard.
@@ -174,11 +195,15 @@ The app reads from the `matches` collection. To test without the real football A
 
 ## 8. Rules Page
 
-- [ ] No "Regla de los 90 Minutos" section exists anywhere on the page
-- [ ] "Eliminatorias — Resultados Pre-torneo" has the knockout rule callout: goles con tiempo extra, penales no cuentan, empate requiere elegir quién avanza
-- [ ] Live prediction timing says "Abre cuando los equipos estén definidos" (not 24h)
-- [ ] Lock timing says "1 hora antes del partido"
-- [ ] All point values match `src/config/scoring.json` — change a value in the JSON file and verify the rules page updates automatically without code changes
+- [ ] No standalone "Regla de los 90 Minutos" section exists on the page
+- [ ] "Eliminatorias — Resultados Pre-torneo" has the knockout rule callout:
+  - **"Los goles cuentan incluyendo el tiempo extra. Los penales no cuentan."**
+  - **"Si predices un empate (ej. 2-2), deberás indicar qué equipo avanza en penales."**
+- [ ] Live prediction timing box says:
+  - ⏰ "Abre: cuando los equipos del partido estén definidos" (not a fixed hour window)
+  - 🔒 "Cierra: **1h** antes del partido" (value pulled from `liveMatchTiming.locksBeforeKickoffHours`)
+- [ ] All point values match `src/config/scoring.json` — change a value in the JSON file and verify the rules page reflects the new number on next load (rebuild required since it's bundled at build time, not fetched at runtime)
+- [ ] "Cierre de Predicciones" section correctly states pre-tournament predictions lock at first kickoff, live predictions lock 1h before each match
 
 ---
 
@@ -188,6 +213,7 @@ The app reads from the `matches` collection. To test without the real football A
 - [ ] Can trigger a match sync from the football API
 - [ ] Can manually mark a match as finished with a score
 - [ ] After calculating points: verify `predictions/{uid}_{matchId}.pointsEarned` is set and `users/{uid}.totalPoints` is updated
+- [ ] `pointsCalculated: true` flag on the match document prevents double-scoring — run the calculation a second time for the same match and verify `totalPoints` does not change
 
 ---
 
@@ -196,14 +222,25 @@ The app reads from the `matches` collection. To test without the real football A
 | Scenario | Expected behaviour |
 |---|---|
 | User has no prediction when match finishes | `pointsEarned: 0`, no crash |
-| Match is cancelled | Card appears faded (opacity 0.5), inputs disabled |
+| Match is cancelled | Card appears faded (opacity 0.5), inputs disabled, not counted in pending badge |
+| Cancelled match with existing prediction | Prediction doc remains in Firestore but no points calculated |
 | Two users with identical points | Both show same rank number |
 | Group with only 1 match entered | Standings still render without crash |
-| Entering a score then clearing it | Prediction not saved (both null skipped in debounce) |
+| Score entered as 0 (zero) | Saved and displayed correctly, not skipped as "empty" |
+| Entering a score then clearing both inputs | Prediction written as null, null (cleared from Firestore) |
+| Clearing only one input (other still filled) | Both written as null (incomplete prediction not saved partially) |
 | Very fast typing in score inputs | Debounce fires only once after ~800ms pause |
 | Admin calculates points twice for same match | `pointsCalculated: true` flag prevents double-scoring |
 | No matches in Firestore | All pages show empty states, no crash |
 | Deep link to `/predictions` with no knockout matches | Empty state shown, no crash |
+| Draw prediction with wrong exact score | Earns goal-difference points (not exact score), since GD=0 matches for any correct draw |
+| Predict 1-1, actual is 2-2 (both draws) | Correct outcome + correct goal difference (both GD=0) → goal-difference tier points, not exact score |
+| Predict 3-1, actual is 2-0 (both home win by 2) | Correct outcome + correct goal difference → goal-difference tier points |
+| Knockout match ends 1-1 after 90 min, extra time ends 2-1 | Actual result for scoring is 2-1 (extra time counts); penalties winner is irrelevant to score tiers |
+| Knockout match ends 2-2 after extra time | Score is a draw for prediction purposes; tiebreaker pick determines bracket advancement |
+| Pre-tournament bracket correct matchup + live prediction submitted | Both scored independently; points from both add to total |
+| `opensBeforeKickoffHours` changed in scoring.json | Live availability is NOT affected (code uses teams-defined gate, not this value) |
+| `locksBeforeKickoffHours` changed in scoring.json | Rules page updates; `isLiveLocked` in code does NOT update (hardcoded 1h) |
 
 ---
 
@@ -218,6 +255,7 @@ The app reads from the `matches` collection. To test without the real football A
    - Both `users/{uid}.totalPoints` reflect the update.
    - Leaderboard shows both users ranked correctly with movement arrows.
    - The finished match shows the real score on the Fixture page (top-right of the card) for both users.
+6. Run point calculation again for the same match → `totalPoints` must **not** change (double-scoring guard).
 
 ---
 
@@ -231,3 +269,25 @@ Test on a real phone or browser DevTools at 390px width (iPhone 14):
 - [ ] Group standings table fits without horizontal scroll
 - [ ] Leaderboard rows truncate long names cleanly
 - [ ] Fixture bracket cards stack vertically and are readable
+- [ ] Tiebreaker penalty buttons large enough to tap on mobile
+- [ ] Rules page point tables readable at 390px
+
+---
+
+## 13. Scoring Logic Verification (Unit-level manual checks)
+
+These require a finished match and known predictions. Use the Admin page to set the exact result, then verify points.
+
+| Prediction | Actual result | Expected tier | Expected pts (group stage) |
+|---|---|---|---|
+| 2-1 | 2-1 | Exact score | 3 |
+| 3-1 | 2-0 | Outcome + GD (both home win by 1... wait, 2 vs 1) | — |
+| 3-1 | 4-2 | Outcome + GD (home wins by 2 both) | 2 |
+| 1-0 | 2-0 | Outcome only (home wins, but GD differs: 1 vs 2) | 1 |
+| 1-1 | 2-2 | Outcome + GD (draw, GD=0 always matches) | 2 |
+| 1-1 | 3-3 | Outcome + GD (draw, GD=0) | 2 |
+| 2-1 | 1-2 | No points (wrong outcome) | 0 |
+
+For **knockout pre-tournament**, same logic applies but points scale by round per `scoring.json`.
+
+For **live knockout predictions**, flat `knockout.liveMatchResult` values apply regardless of round.
