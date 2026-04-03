@@ -29,11 +29,11 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Navigate to='/pronostico' replace />} />
-        <Route path='/matches' element={<MatchesPage />} />
+        <Route path='/partidos' element={<MatchesPage />} />
         <Route path='/pronostico' element={<FixturePage />} />
-        <Route path='/predictions' element={<PredictionsPage />} />
-        <Route path='/leaderboard' element={<LeaderboardPage />} />
-        <Route path='/rules' element={<RulesPage />} />
+        <Route path='/predicciones' element={<PredictionsPage />} />
+        <Route path='/tabla' element={<LeaderboardPage />} />
+        <Route path='/reglas' element={<RulesPage />} />
         <Route path='/admin' element={<AdminPage />} />
         <Route path='*' element={<Navigate to='/pronostico' replace />} />
       </Route>

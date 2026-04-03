@@ -10,9 +10,9 @@ import PredictionIcon from '../assets/prediction.svg?react';
 
 const NAV_TABS = [
   { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
-  { path: '/predictions', icon: PredictionIcon, label: 'Predicciones' },
-  { path: '/leaderboard', icon: LeaderboardIcon, label: 'Tabla' },
-  { path: '/rules', icon: RulesIcon, label: 'Reglas' },
+  { path: '/predicciones', icon: PredictionIcon, label: 'Predicciones' },
+  { path: '/tabla', icon: LeaderboardIcon, label: 'Tabla' },
+  { path: '/reglas', icon: RulesIcon, label: 'Reglas' },
 ];
 
 export default function Layout() {

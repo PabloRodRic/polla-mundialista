@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDocs, where, deleteField, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -8,6 +8,8 @@ import {
   stopAutoSync,
   startAutoSync,
   calculatePointsForMatch,
+  calculateLivePoints,
+  resetPointsForMatch,
   getSyncStatus,
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
@@ -77,6 +79,24 @@ function MatchOverrideCard({ match, onSave }) {
   const [scoreB, setScoreB] = useState(match.scoreB ?? '');
   const [status, setStatus] = useState(match.status);
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // Sync local state when Firestore updates the match (e.g. after clearing an override)
+  useEffect(() => {
+    setScoreA(match.scoreA ?? '');
+    setScoreB(match.scoreB ?? '');
+    setStatus(match.status);
+  }, [match.scoreA, match.scoreB, match.status]);
+
+  // Auto-switch to finished when both scores are entered
+  function handleScoreChange(side, val) {
+    if (side === 'A') setScoreA(val);
+    else setScoreB(val);
+    const otherVal = side === 'A' ? scoreB : scoreA;
+    if (val !== '' && otherVal !== '' && status !== 'live' && status !== 'finished') {
+      setStatus('finished');
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -86,6 +106,8 @@ function MatchOverrideCard({ match, onSave }) {
         status,
         lastSyncedAt: Timestamp.now(),
         pointsCalculated: false,
+        adminOverride: true,
+        adminOverriddenAt: Timestamp.now(),
       };
       if (scoreA !== '' && scoreB !== '') {
         updates.scoreA = Number(scoreA);
@@ -95,6 +117,8 @@ function MatchOverrideCard({ match, onSave }) {
 
       if (status === 'finished' && scoreA !== '' && scoreB !== '') {
         await calculatePointsForMatch(match.id, Number(scoreA), Number(scoreB), match.stage);
+      } else if (status === 'live' && scoreA !== '' && scoreB !== '') {
+        await calculateLivePoints(match.id, Number(scoreA), Number(scoreB), match.stage);
       }
       onSave?.();
     } catch (err) {
@@ -104,16 +128,48 @@ function MatchOverrideCard({ match, onSave }) {
     }
   }
 
+  async function handleClearOverride() {
+    setClearing(true);
+    try {
+      // First reset points across all prediction collections and zero out the match scores
+      await resetPointsForMatch(match.id);
+      // Then remove the override flags
+      const matchRef = doc(db, 'matches', match.id);
+      await updateDoc(matchRef, {
+        adminOverride: deleteField(),
+        adminOverriddenAt: deleteField(),
+      });
+      onSave?.('Ajuste manual borrado');
+    } catch (err) {
+      console.error('Error clearing override:', err);
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div
       className='rounded-xl p-4 mb-3'
-      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+      style={{
+        background: 'var(--color-surface-card)',
+        border: `1px solid ${match.adminOverride ? 'var(--color-gold)' : 'var(--color-border)'}`,
+      }}
     >
       <div className='flex items-start justify-between mb-3 gap-2'>
         <div>
-          <p className='text-sm font-semibold' style={{ color: 'var(--color-text-primary)' }}>
-            {match.tlaA || match.teamA} vs {match.tlaB || match.teamB}
-          </p>
+          <div className='flex items-center gap-2'>
+            <p className='text-sm font-semibold' style={{ color: 'var(--color-text-primary)' }}>
+              {match.tlaA || match.teamA} vs {match.tlaB || match.teamB}
+            </p>
+            {match.adminOverride && (
+              <span
+                className='text-xs px-1.5 py-0.5 rounded font-medium'
+                style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
+              >
+                ajuste manual
+              </span>
+            )}
+          </div>
           <p className='text-xs mt-0.5' style={{ color: 'var(--color-text-muted)' }}>
             {match.stage === 'group' ? `Grupo ${match.group} · J${match.matchday}` : match.stage}
           </p>
@@ -142,7 +198,7 @@ function MatchOverrideCard({ match, onSave }) {
           max='99'
           placeholder='0'
           value={scoreA}
-          onChange={(e) => setScoreA(e.target.value)}
+          onChange={(e) => handleScoreChange('A', e.target.value)}
           className='w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none'
           style={{
             background: 'var(--color-surface)',
@@ -157,7 +213,7 @@ function MatchOverrideCard({ match, onSave }) {
           max='99'
           placeholder='0'
           value={scoreB}
-          onChange={(e) => setScoreB(e.target.value)}
+          onChange={(e) => handleScoreChange('B', e.target.value)}
           className='w-16 h-10 text-center text-lg font-bold rounded-lg border-0 outline-none'
           style={{
             background: 'var(--color-surface)',
@@ -165,23 +221,37 @@ function MatchOverrideCard({ match, onSave }) {
             color: 'var(--color-text-primary)',
           }}
         />
-        <span className='text-xs ml-1' style={{ color: 'var(--color-text-muted)' }}>
-          (solo 90 min)
-        </span>
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className='w-full py-2 rounded-lg text-sm font-semibold transition-opacity'
-        style={{
-          background: 'var(--color-pitch)',
-          color: 'var(--color-text-primary)',
-          opacity: saving ? 0.6 : 1,
-        }}
-      >
-        {saving ? 'Guardando...' : 'Guardar resultado'}
-      </button>
+      <div className='flex gap-2'>
+        <button
+          onClick={handleSave}
+          disabled={saving || clearing}
+          className='flex-1 py-2 rounded-lg text-sm font-semibold transition-opacity'
+          style={{
+            background: 'var(--color-pitch)',
+            color: 'var(--color-text-primary)',
+            opacity: saving || clearing ? 0.6 : 1,
+          }}
+        >
+          {saving ? 'Guardando...' : 'Guardar resultado'}
+        </button>
+        {match.adminOverride && (
+          <button
+            onClick={handleClearOverride}
+            disabled={saving || clearing}
+            className='px-3 py-2 rounded-lg text-xs font-medium transition-opacity'
+            style={{
+              background: 'rgba(231,76,60,0.12)',
+              color: 'var(--color-accent-red)',
+              border: '1px solid var(--color-accent-red)',
+              opacity: saving || clearing ? 0.6 : 1,
+            }}
+          >
+            {clearing ? '...' : 'Borrar ajuste'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -229,6 +299,20 @@ export default function AdminPage() {
     } finally {
       setSyncing(false);
     }
+  }
+
+  async function handleClearAllOverrides() {
+    const snap = await getDocs(query(collection(db, 'matches'), where('adminOverride', '==', true)));
+    if (snap.empty) {
+      showToast('No hay ajustes manuales activos', 'error');
+      return;
+    }
+    const promises = [];
+    snap.forEach((d) => {
+      promises.push(updateDoc(d.ref, { adminOverride: deleteField(), adminOverriddenAt: deleteField() }));
+    });
+    await Promise.all(promises);
+    showToast(`${promises.length} ajuste(s) manual(es) borrado(s)`);
   }
 
   function handleToggleAuto() {
@@ -310,6 +394,19 @@ export default function AdminPage() {
         {syncing || syncStatus.syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar Partidos Ahora'}
       </button>
 
+      {/* [TEMP] Clear all overrides */}
+      <button
+        onClick={handleClearAllOverrides}
+        className='w-full py-2 rounded-xl text-xs font-medium mb-4 transition-opacity'
+        style={{
+          background: 'rgba(231,76,60,0.1)',
+          color: 'var(--color-accent-red)',
+          border: '1px solid var(--color-accent-red)',
+        }}
+      >
+        [TEST] Borrar todos los ajustes manuales
+      </button>
+
       {/* Status card */}
       <StatusCard syncStatus={syncStatus} autoPaused={autoPaused} onToggleAuto={handleToggleAuto} />
 
@@ -349,7 +446,7 @@ export default function AdminPage() {
           <p>Sin partidos con este filtro.</p>
         </div>
       ) : (
-        filtered.map((m) => <MatchOverrideCard key={m.id} match={m} onSave={() => showToast('Resultado guardado')} />)
+        filtered.map((m) => <MatchOverrideCard key={m.id} match={m} onSave={(msg) => showToast(msg || 'Resultado guardado')} />)
       )}
     </div>
   );

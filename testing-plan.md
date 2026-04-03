@@ -1,161 +1,233 @@
-# Polla Mundial 2026 — Manual Testing Plan
+# Polla Mundialista 2026 — Testing Plan
 
-## 1. Pre-Tournament Predictions (Phase 1)
-
-### 1A. Group Stage Predictions
-- [ ] Enter scores for all matches in one group (e.g. Group A)
-- [ ] Verify the standings table calculates correctly: points (3 win, 1 draw, 0 loss), goal difference, goals for
-- [ ] Verify tiebreakers work (head-to-head, goal difference, goals scored)
-- [ ] Change one score and confirm the standings table updates immediately
-- [ ] Enter a set of scores where 3rd place is important — verify best 3rd-place logic works across groups
-- [ ] Leave a group incomplete — verify the bracket does NOT populate from incomplete groups
-- [ ] Complete all groups — verify all 48 teams' positions are resolved and advancing teams are highlighted
-
-### 1B. Best 3rd-Place Logic
-This is the trickiest part. Test with known scenarios:
-- [ ] Create a scenario where multiple 3rd-place teams have the same points — verify tiebreakers apply
-- [ ] Verify the correct number of 3rd-place teams advance (8 out of 12 in the 2026 format)
-- [ ] Verify the 3rd-place teams are slotted into the correct Round of 32 matchups per FIFA seeding rules
-
-### 1C. Knockout Bracket Cascade
-- [ ] Complete all group predictions — verify Round of 32 populates with correct matchups
-- [ ] Predict all Round of 32 results — verify Round of 16 populates with winners
-- [ ] Predict Round of 16 — verify Quarterfinals populate
-- [ ] Continue through Semis, 3rd place match, Final
-- [ ] Verify Champion, Runner-up, 3rd place are automatically set from bracket results
-- [ ] Go BACK and change a group stage score that changes who advances — verify the entire bracket downstream resets or updates accordingly (this is critical)
-
-### 1D. Individual Awards
-- [ ] Verify Golden Boot and Golden Ball player name inputs appear after bracket is complete
-- [ ] Enter player names and confirm they save correctly
-
-### 1E. Lock Mechanism
-- [ ] Before lock time: verify all predictions are editable
-- [ ] Simulate lock time (set tournament start to a time in the past, or use a test override): verify no edits are possible
-- [ ] Verify a clear message is shown when predictions are locked
+A manual testing guide covering every feature of the app. Run through each section after any significant change.
 
 ---
 
-## 2. Scoring Verification
+## 0. Setup & Test Accounts
 
-Create 2 test users with different predictions. Use known match results to verify points.
+### Create test users
+1. Open the app in two different browsers (or one normal + one incognito).
+2. Sign in with a different Google account in each — the account picker will always appear thanks to `prompt: 'select_account'`.
+3. Designate one account as **Admin** (set `isAdmin: true` in Firestore → `users/{uid}`).
+4. Use the second account as a **regular user** to test the player perspective.
 
-### Test Scenario Setup
-Pick a small set of matches (e.g. 3 group matches) and define:
-- The ACTUAL results (what really happened)
-- User A's predictions
-- User B's predictions
+### Firestore mock data — Matches
+The app reads from the `matches` collection. To test without the real football API, manually create documents in Firestore with this shape:
 
-### 2A. Group Stage Scoring
+```json
+{
+  "stage": "group",
+  "group": "A",
+  "matchday": 1,
+  "teamA": "Mexico",   "tlaA": "MEX",  "flagA": "mx",
+  "teamB": "USA",      "tlaB": "USA",  "flagB": "us",
+  "date": "<Timestamp — a future date>",
+  "status": "scheduled",
+  "scoreA": null,
+  "scoreB": null,
+  "venue": "Estadio Azteca",
+  "pointsCalculated": false
+}
+```
 
-| Match | Actual | User A | User B |
-|-------|--------|--------|--------|
-| MEX vs RSA | 2-1 | 2-1 | 1-0 |
-| KOR vs CZE | 0-0 | 1-1 | 0-0 |
-| MEX vs CZE | 3-0 | 2-0 | 3-0 |
+**Minimum viable dataset for full testing:**
+- 6 matches per group × 2 groups (A and B) = 12 group matches (enough to test standings + best-3rd logic)
+- 2 knockout matches with `stage: "roundOf32"` — set `tlaA`/`tlaB` on one but leave the other with both null to test availability logic
 
-Expected points for User A on match 1:
-- Correct outcome (Mexico win)? ✓ → +X pts
-- Correct goal difference (1)? ✓ → +X pts
-- Exact score? ✓ → +X pts
-
-Do this math by hand for each match, then compare with what the app awards.
-
-- [ ] Verify correct outcome (1X2) points
-- [ ] Verify correct outcome + goal difference points
-- [ ] Verify exact score points
-- [ ] Verify group final standings points (1st, 2nd, 3rd, 4th place)
-
-### 2B. Knockout Scoring — Pre-Tournament Bracket
-
-| Match | Actual | User A | User B |
-|-------|--------|--------|--------|
-| R32: BRA vs JPN | 2-1 | 2-1 | 3-0 |
-| R16: BRA vs GER | 1-1 (BRA advances) | 2-0 | 1-1 (BRA) |
-
-- [ ] Verify team advancement points (did user predict BRA would reach R16? → points)
-- [ ] Verify match result points scale by round (R32 < R16 < QF < SF < Final)
-- [ ] Verify exact score in knockout awards correct points
-- [ ] Test a draw prediction: user predicts 1-1 and picks advancing team — verify this works and scores correctly
-
-### 2C. Knockout Scoring — New Draw Rule
-- [ ] User predicts 2-2 draw in knockout match → verify app asks which team advances
-- [ ] Actual result is 2-2 and same team advances → verify full points awarded
-- [ ] Actual result is 2-2 but different team advances → verify partial points (outcome correct, advancement wrong)
-- [ ] Actual result is NOT a draw but user predicted a draw → verify only outcome points if applicable
-
-### 2D. Tournament Outcome Scoring
-- [ ] Verify Champion prediction points
-- [ ] Verify Runner-up prediction points
-- [ ] Verify 3rd place prediction points
-
-### 2E. Individual Awards Scoring
-- [ ] Verify Golden Boot points when correct
-- [ ] Verify Golden Ball points when correct
-- [ ] Verify zero points when incorrect
-
-### 2F. Leaderboard
-- [ ] Verify total points add up correctly for each user
-- [ ] Verify ranking order is correct
-- [ ] With 3+ test users, verify position change arrows after results update
+**Status values to test with:** `scheduled`, `live`, `finished`, `cancelled`
 
 ---
 
-## 3. Live Knockout Predictions (Phase 2)
+## 1. Authentication
 
-### 3A. Testing Approach — Time Simulation
-Since you can't wait for real matches, you need a way to simulate match timing. Options:
-
-**Option A: Admin time override (recommended)**
-Add a dev/admin setting to manually set "current time" for the app. This lets you:
-- Set time to 24h before a match → verify prediction opens
-- Set time to 30min before kickoff → verify prediction is locked
-- Set time to after the match → verify results display
-
-**Option B: Create test matches with near-future kickoff times**
-- In admin panel, create a test knockout match with kickoff 2 hours from now
-- Verify the live prediction opens immediately
-- Wait until 1 hour before → verify it locks
-- Manually enter a result → verify scoring
-
-### 3B. Live Prediction Flow
-- [ ] Match available, more than 1h to kickoff → prediction form is open and editable
-- [ ] User enters a prediction → saves correctly
-- [ ] User changes prediction → updates correctly
-- [ ] Less than 1h to kickoff → prediction is locked, shows what user predicted
-- [ ] No prediction was made before lock → shows "no prediction" state
-- [ ] Match result is entered → points calculated and added to leaderboard
-- [ ] Verify live prediction points STACK with pre-tournament bracket points (both count)
-
-### 3C. Edge Cases
-- [ ] User tries to submit prediction exactly at lock time — what happens?
-- [ ] Match kickoff time changes (delayed) — does lock time update?
-- [ ] User has no pre-tournament prediction for this match but makes a live prediction — only live points count
+| What to test | How |
+|---|---|
+| Login always shows account picker | Sign out → sign in again → Google popup should ask which account |
+| First login creates user in Firestore | After first login, check `users/{uid}` was created with `totalPoints: 0` |
+| Admin sees Admin tab | Set `isAdmin: true` on the user doc → reload → Admin tab should appear |
+| Non-admin does NOT see Admin tab | Regular user should only see 4 tabs |
+| Sign out works | Tap avatar → Cerrar sesión → should return to login screen |
 
 ---
 
-## 4. Quick Reference: Point Values
+## 2. Navigation & Default Route
 
-Fill in the actual values from your scoring.json so you can cross-reference during testing:
+| What to test | How |
+|---|---|
+| Default tab is Fixture | Open app fresh → should land on `/pronostico` (Fixture tab) |
+| 4 tabs visible for regular users | Fixture, Predicciones, Tabla, Reglas |
+| 5 tabs for admin | Same + Admin |
+| Unknown URL redirects to Fixture | Navigate to `/anything-random` → should redirect to `/pronostico` |
 
-| Category | Points |
-|----------|--------|
-| Group: Correct outcome (1X2) | ___ |
-| Group: Outcome + goal difference | ___ |
-| Group: Exact score | ___ |
-| Group standings: 1st place | ___ |
-| Group standings: 2nd place | ___ |
-| Group standings: 3rd place | ___ |
-| Group standings: 4th place | ___ |
-| Team advancement: R32 | ___ |
-| Team advancement: R16 | ___ |
-| Team advancement: QF | ___ |
-| Team advancement: SF | ___ |
-| Team advancement: Final | ___ |
-| Champion correct | ___ |
-| Runner-up correct | ___ |
-| 3rd place correct | ___ |
-| Golden Boot | ___ |
-| Golden Ball | ___ |
+---
 
-Fill this in from scoring.json, then use it as your answer key when testing.
+## 3. Fixture Page — Group Stage (tab: Grupos)
+
+### 3a. Score input
+- [ ] Enter scores for a match → card border turns green (pitch color)
+- [ ] Winning side gets gold highlight, losing side is normal
+- [ ] Draw → both sides get subtle blue highlight
+- [ ] "Guardando..." appears top-right while saving, then disappears
+- [ ] Scores persist after page reload (saved to Firestore)
+- [ ] Inputs are disabled when tournament is locked (first match date has passed)
+
+### 3b. Group standings
+- [ ] Standings update in real time as you enter scores
+- [ ] Points calculated correctly: Win=3, Draw=1, Loss=0
+- [ ] 🥇 badge on 1st place, 🥈 on 2nd
+- [ ] ✦ (blue) badge on best 3rd place teams — requires entering scores for multiple groups
+- [ ] Goal difference and goals for used as tiebreakers
+
+### 3c. Best 3rd place logic
+- Enter results for all groups to populate 3rd-place standings
+- The top 8 third-place teams (by pts → gd → gf) should get the ✦ badge
+- These 8 teams should populate `bp1–bp8` slots in the Round of 32
+
+### 3d. Match card layout
+- [ ] Each card shows: `Jornada X · día, DD mes HH:MM` on top row
+- [ ] Real score shown top-right when match is `finished` or `live`
+- [ ] Live matches show `🔴` prefix on score
+- [ ] Card size is consistent across all group cards
+
+---
+
+## 4. Fixture Page — Eliminatorias (tab: Eliminatorias)
+
+### 4a. Round of 32 population
+- [ ] R32 bracket shows "Por definir" slots until groups are predicted
+- [ ] After entering all group scores, bracket auto-populates with predicted 1st/2nd/best-3rd
+- [ ] Cards show date/hour from the corresponding Firestore roundOf32 matches (by index order)
+
+### 4b. Knockout score input
+- [ ] Enter score for a R32 match → winner auto-highlighted in gold
+- [ ] Tiebreaker section ONLY appears when scores are equal (e.g. 2-2)
+- [ ] Cannot click a team to pick winner unless scores are tied
+- [ ] "Guardando..." appears when saving knockout scores
+- [ ] Winner cascades to the next round (R16 slot populates automatically)
+
+### 4c. Round progression
+- [ ] R16 tab locked with warning until all R32 picks are complete
+- [ ] QF locked until R16 complete, and so on
+- [ ] 3rd place match shows the two SF losers
+- [ ] Final shows the two SF winners
+
+### 4d. Tournament lock
+- Change the first group match date in Firestore to a past timestamp
+- [ ] All inputs should become disabled
+- [ ] Lock icon (🔒) should appear on knockout cards
+
+---
+
+## 5. Fixture Page — Premios (tab: Premios)
+
+- [ ] Shows predicted Champion, Runner-up, 3rd Place derived from bracket
+- [ ] Shows "Por definir" placeholders if bracket is incomplete
+- [ ] Golden Boot and Golden Ball text inputs accept any player name
+- [ ] Saved values persist after reload
+- [ ] Inputs disabled when tournament is locked
+
+---
+
+## 6. Predictions Page — Live Knockout
+
+### 6a. Availability logic
+- Create a knockout match in Firestore **with** `tlaA` and `tlaB` set → should appear with enabled inputs
+- Create one **without** teams → card shows "Disponible cuando se definan los equipos" with disabled inputs
+
+### 6b. Lock timing
+- Set a match date to 30 minutes from now (via Firestore) → inputs should be disabled with 🔒
+- Set date to 2 hours from now → inputs should be enabled
+
+### 6c. Filter tabs
+- **Próximos**: shows only matches from the current/next knockout stage (e.g. only R32 until all R32 are done, then only R16)
+- **Finalizados**: shows only matches with `status: "finished"`
+- **Todos**: shows all knockout matches regardless of state
+
+### 6d. Prediction flow
+- [ ] Enter a score → "Guardando..." flashes per card
+- [ ] Score persists after reload
+- [ ] Real score shown on finished matches
+- [ ] Points badge shown on finished matches that have scored predictions
+
+### 6e. Pending badge
+- [ ] Red badge in header shows count of available matches with no prediction yet
+- [ ] Badge disappears when all available matches have predictions
+
+---
+
+## 7. Leaderboard
+
+- [ ] Players ranked by `totalPoints` descending
+- [ ] 🥇🥈🥉 medals for top 3
+- [ ] Current user row highlighted in gold tint with "(tú)" label
+- [ ] "Estás en el puesto #X de Y jugadores" subtitle
+
+### Position change arrows
+1. Note everyone's current rank in the leaderboard.
+2. As Admin, trigger point calculation for a finished match.
+3. Reload leaderboard.
+4. Players who moved up show `▲N` in green; down show `▼N` in red; no change shows `—`.
+5. Before any calculation has ever run → no arrow shown at all (no snapshot exists yet).
+
+---
+
+## 8. Rules Page
+
+- [ ] No "Regla de los 90 Minutos" section exists anywhere on the page
+- [ ] "Eliminatorias — Resultados Pre-torneo" has the knockout rule callout: goles con tiempo extra, penales no cuentan, empate requiere elegir quién avanza
+- [ ] Live prediction timing says "Abre cuando los equipos estén definidos" (not 24h)
+- [ ] Lock timing says "1 hora antes del partido"
+- [ ] All point values match `src/config/scoring.json` — change a value in the JSON file and verify the rules page updates automatically without code changes
+
+---
+
+## 9. Admin Page
+
+- [ ] Only accessible to users with `isAdmin: true`
+- [ ] Can trigger a match sync from the football API
+- [ ] Can manually mark a match as finished with a score
+- [ ] After calculating points: verify `predictions/{uid}_{matchId}.pointsEarned` is set and `users/{uid}.totalPoints` is updated
+
+---
+
+## 10. Edge Cases & Stress Tests
+
+| Scenario | Expected behaviour |
+|---|---|
+| User has no prediction when match finishes | `pointsEarned: 0`, no crash |
+| Match is cancelled | Card appears faded (opacity 0.5), inputs disabled |
+| Two users with identical points | Both show same rank number |
+| Group with only 1 match entered | Standings still render without crash |
+| Entering a score then clearing it | Prediction not saved (both null skipped in debounce) |
+| Very fast typing in score inputs | Debounce fires only once after ~800ms pause |
+| Admin calculates points twice for same match | `pointsCalculated: true` flag prevents double-scoring |
+| No matches in Firestore | All pages show empty states, no crash |
+| Deep link to `/predictions` with no knockout matches | Empty state shown, no crash |
+
+---
+
+## 11. Multi-User Flow (Full End-to-End)
+
+1. Log in as **User A** and fill out all group stage predictions.
+2. Log in as **User B** (different browser/incognito) and fill out different predictions.
+3. As **Admin**, sync matches and mark one group match as finished with a real score.
+4. Admin calculates points for that match.
+5. Verify:
+   - Both users' `predictions` documents have `pointsEarned` set correctly based on their different picks.
+   - Both `users/{uid}.totalPoints` reflect the update.
+   - Leaderboard shows both users ranked correctly with movement arrows.
+   - The finished match shows the real score on the Fixture page (top-right of the card) for both users.
+
+---
+
+## 12. Mobile Responsiveness
+
+Test on a real phone or browser DevTools at 390px width (iPhone 14):
+
+- [ ] Bottom nav does not overlap content (padding-bottom applied)
+- [ ] Score input boxes are large enough to tap (44×44px minimum)
+- [ ] No number input spinners visible on any score field
+- [ ] Group standings table fits without horizontal scroll
+- [ ] Leaderboard rows truncate long names cleanly
+- [ ] Fixture bracket cards stack vertically and are readable

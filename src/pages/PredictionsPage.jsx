@@ -58,37 +58,6 @@ function ScoreInput({ value, onChange, disabled }) {
   );
 }
 
-function PredictionResult({ points, predictedA, predictedB, realA, realB }) {
-  if (points === null || points === undefined) return null;
-
-  let label = 'Sin puntos';
-  if (predictedA === realA && predictedB === realB) label = 'Resultado exacto ✨';
-  else if (points > 0) {
-    const pResult = Math.sign(predictedA - predictedB);
-    const rResult = Math.sign(realA - realB);
-    const pDiff = Math.abs(predictedA - predictedB);
-    const rDiff = Math.abs(realA - realB);
-    if (pResult === rResult && pDiff === rDiff) label = 'Resultado + diferencia de gol';
-    else if (pResult === rResult) label = 'Resultado correcto';
-  }
-
-  return (
-    <div
-      className='mt-3 rounded-lg px-3 py-2 flex items-center justify-between'
-      style={{ background: points > 0 ? 'rgba(212,168,67,0.1)' : 'rgba(90,97,112,0.15)' }}
-    >
-      <span className='text-xs' style={{ color: 'var(--color-text-secondary)' }}>
-        {label}
-      </span>
-      <span
-        className='text-sm font-bold'
-        style={{ color: points > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
-      >
-        {points > 0 ? `+${points} pts` : '0 pts'}
-      </span>
-    </div>
-  );
-}
 
 function TeamSlot({ match, side }) {
   const flag = side === 'A' ? match.flagA : match.flagB;
@@ -210,25 +179,27 @@ function PredictionCard({ match, prediction, onSave, saving }) {
         </p>
       )}
 
-      {/* Real score (if finished) */}
-      {finished && match.scoreA !== null && (
-        <div className='mt-3 text-center text-sm' style={{ color: 'var(--color-text-secondary)' }}>
-          Resultado:{' '}
-          <strong style={{ color: 'var(--color-text-primary)' }}>
+      {/* Real result (if finished or live) */}
+      {(finished || match.status === 'live') && match.scoreA !== null && (
+        <div
+          className='mt-3 pt-3 flex items-center justify-center gap-2 text-xs'
+          style={{ borderTop: '1px solid var(--color-border)' }}
+        >
+          <span style={{ color: 'var(--color-text-muted)' }}>
+            {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
+          </span>
+          <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
             {match.scoreA} – {match.scoreB}
-          </strong>
+          </span>
+          {prediction?.pointsEarned !== undefined && (
+            <span
+              className='font-semibold'
+              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
+            >
+              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
+            </span>
+          )}
         </div>
-      )}
-
-      {/* Points result */}
-      {finished && prediction?.pointsEarned !== undefined && (
-        <PredictionResult
-          points={prediction.pointsEarned}
-          predictedA={prediction.predictedScoreA}
-          predictedB={prediction.predictedScoreB}
-          realA={match.scoreA}
-          realB={match.scoreB}
-        />
       )}
 
       {/* Prompt if available but no prediction yet */}

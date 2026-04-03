@@ -114,26 +114,12 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
         border: `1px solid ${hasResult ? 'var(--color-pitch)' : 'var(--color-border)'}`,
       }}
     >
-      {/* Date + saving + real score */}
+      {/* Date + saving */}
       <div className='flex items-center justify-between mb-2'>
         <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
           Jornada {match.matchday} · {formatDate(match.date)}
         </span>
-        <div className='flex items-center gap-2'>
-          {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
-          {(match.status === 'finished' || match.status === 'live') && match.scoreA !== null && (
-            <span
-              className='text-xs font-bold'
-              style={{
-                color: match.status === 'live' ? 'var(--color-accent-red)' : 'var(--color-text-secondary)',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {match.status === 'live' ? '🔴 ' : ''}
-              {match.scoreA} – {match.scoreB}
-            </span>
-          )}
-        </div>
+        {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
       </div>
 
       <div className='flex items-center gap-2'>
@@ -190,6 +176,29 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
           </span>
         </div>
       </div>
+
+      {/* Real result (if finished or live) */}
+      {(match.status === 'finished' || match.status === 'live') && match.scoreA !== null && (
+        <div
+          className='mt-2 pt-2 flex items-center justify-center gap-2 text-xs'
+          style={{ borderTop: '1px solid var(--color-border)' }}
+        >
+          <span style={{ color: 'var(--color-text-muted)' }}>
+            {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
+          </span>
+          <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+            {match.scoreA} – {match.scoreB}
+          </span>
+          {prediction?.pointsEarned !== undefined && (
+            <span
+              className='font-semibold'
+              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
+            >
+              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
+            </span>
+          )}
+        </div>
+      )}
 
     </div>
   );

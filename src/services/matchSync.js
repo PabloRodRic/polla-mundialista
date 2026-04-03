@@ -95,6 +95,7 @@ export async function syncMatchesFromAPI() {
     existingSnap.forEach(d => { existing[d.id] = d.data() })
 
     const newlyFinished = []
+    const currentlyLive = []
     const batch = writeBatch(db)
 
     for (const apiMatch of apiMatches) {
@@ -106,12 +107,28 @@ export async function syncMatchesFromAPI() {
       if (
         normalized.status === 'finished' &&
         prev?.status !== 'finished' &&
-        !prev?.pointsCalculated
+        !prev?.pointsCalculated &&
+        !prev?.adminOverride
       ) {
         newlyFinished.push({ docId, ...normalized })
       }
 
-      batch.set(matchRef, normalized, { merge: true })
+      if (
+        normalized.status === 'live' &&
+        normalized.scoreA !== null &&
+        normalized.scoreB !== null &&
+        !prev?.adminOverride
+      ) {
+        currentlyLive.push({ docId, ...normalized })
+      }
+
+      // If admin has manually overridden this match, don't clobber their scores/status
+      if (prev?.adminOverride) {
+        const { scoreA, scoreB, status, ...safeNormalized } = normalized
+        batch.set(matchRef, safeNormalized, { merge: true })
+      } else {
+        batch.set(matchRef, normalized, { merge: true })
+      }
     }
 
     await batch.commit()
@@ -124,9 +141,14 @@ export async function syncMatchesFromAPI() {
     }
     notifyListeners()
 
-    // Calculate points for matches that just finished
+    // Calculate points for matches that just finished (final, locked)
     for (const match of newlyFinished) {
       await calculatePointsForMatch(match.docId, match.scoreA, match.scoreB, match.stage)
+    }
+
+    // Update live points on every sync cycle
+    for (const match of currentlyLive) {
+      await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage)
     }
 
     return apiMatches.length
@@ -197,24 +219,15 @@ export function computeMatchPoints(predicted, real, stage) {
   return 0
 }
 
-export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
-  const matchRef = doc(db, 'matches', String(matchId))
-  const matchSnap = await getDoc(matchRef)
-
-  if (matchSnap.data()?.pointsCalculated) return
-
-  const predsSnap = await getDocs(
-    query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
-  )
-
-  if (predsSnap.empty) {
-    await updateDoc(matchRef, { pointsCalculated: true })
-    return
-  }
-
+// Shared: write points to all prediction collections for a match, return affected user IDs
+async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
   const affectedUserIds = new Set()
   const batch = writeBatch(db)
 
+  // 1. Live knockout predictions (PredictionsPage → 'predictions' collection)
+  const predsSnap = await getDocs(
+    query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
+  )
   predsSnap.forEach(predDoc => {
     const pred = predDoc.data()
     const points = computeMatchPoints(
@@ -226,10 +239,53 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
     affectedUserIds.add(pred.userId)
   })
 
-  batch.update(matchRef, { pointsCalculated: true })
-  await batch.commit()
+  // 2. Group stage predictions (FixturePage → 'preTournamentGroupPredictions' collection)
+  const groupPredsSnap = await getDocs(
+    query(collection(db, 'preTournamentGroupPredictions'), where('matchId', '==', String(matchId)))
+  )
+  groupPredsSnap.forEach(predDoc => {
+    const pred = predDoc.data()
+    const points = computeMatchPoints(
+      { scoreA: pred.predictedScoreA, scoreB: pred.predictedScoreB },
+      { scoreA, scoreB },
+      stage
+    )
+    batch.update(predDoc.ref, { pointsEarned: points, calculatedAt: Timestamp.now() })
+    affectedUserIds.add(pred.userId)
+  })
 
-  // Snapshot current leaderboard ranks before recalculating so the UI can show movement
+  // 3. Bracket knockout score predictions (FixturePage → 'preTournamentBracket' flat fields ks_{matchId}_A/B)
+  const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'))
+  bracketSnap.forEach(bracketDoc => {
+    const data = bracketDoc.data()
+    const predA = data[`ks_${matchId}_A`]
+    const predB = data[`ks_${matchId}_B`]
+    if (predA !== undefined && predB !== undefined && predA !== null && predB !== null) {
+      const points = computeMatchPoints(
+        { scoreA: predA, scoreB: predB },
+        { scoreA, scoreB },
+        stage
+      )
+      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points })
+      if (data.userId) affectedUserIds.add(data.userId)
+    }
+  })
+
+  await batch.commit()
+  return affectedUserIds
+}
+
+// Final scoring when a match finishes — guards against double-run, snapshots ranks
+export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
+  const matchRef = doc(db, 'matches', String(matchId))
+  const matchSnap = await getDoc(matchRef)
+  if (matchSnap.data()?.pointsCalculated) return
+
+  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage)
+
+  await updateDoc(matchRef, { pointsCalculated: true })
+
+  // Snapshot ranks before recalculating so UI can show position movement
   const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('totalPoints', 'desc')))
   const rankSnapshot = {}
   let rank = 1
@@ -241,11 +297,85 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   }
 }
 
+// Live scoring — recalculates every sync, no guard, no rank snapshot, no flag
+export async function calculateLivePoints(matchId, scoreA, scoreB, stage) {
+  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage)
+  for (const userId of affectedUserIds) {
+    await recalculateTotalPoints(userId)
+  }
+}
+
+export async function resetPointsForMatch(matchId) {
+  const matchRef = doc(db, 'matches', String(matchId))
+  const affectedUserIds = new Set()
+  const batch = writeBatch(db)
+
+  // Reset match state so next sync (or next save) can re-score it
+  batch.update(matchRef, {
+    scoreA: null,
+    scoreB: null,
+    status: 'upcoming',
+    pointsCalculated: false,
+  })
+
+  // Zero out predictions collection
+  const predsSnap = await getDocs(
+    query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
+  )
+  predsSnap.forEach(predDoc => {
+    batch.update(predDoc.ref, { pointsEarned: 0 })
+    affectedUserIds.add(predDoc.data().userId)
+  })
+
+  // Zero out group predictions collection
+  const groupPredsSnap = await getDocs(
+    query(collection(db, 'preTournamentGroupPredictions'), where('matchId', '==', String(matchId)))
+  )
+  groupPredsSnap.forEach(predDoc => {
+    batch.update(predDoc.ref, { pointsEarned: 0 })
+    affectedUserIds.add(predDoc.data().userId)
+  })
+
+  // Zero out bracket ksp_* field for this match across all users
+  const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'))
+  bracketSnap.forEach(bracketDoc => {
+    const data = bracketDoc.data()
+    if (`ksp_${matchId}` in data) {
+      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: 0 })
+      if (data.userId) affectedUserIds.add(data.userId)
+    }
+  })
+
+  await batch.commit()
+
+  for (const userId of affectedUserIds) {
+    await recalculateTotalPoints(userId)
+  }
+}
+
 async function recalculateTotalPoints(userId) {
+  let total = 0
+
+  // Live knockout predictions
   const predsSnap = await getDocs(
     query(collection(db, 'predictions'), where('userId', '==', userId))
   )
-  let total = 0
   predsSnap.forEach(d => { total += d.data().pointsEarned || 0 })
+
+  // Group stage predictions
+  const groupPredsSnap = await getDocs(
+    query(collection(db, 'preTournamentGroupPredictions'), where('userId', '==', userId))
+  )
+  groupPredsSnap.forEach(d => { total += d.data().pointsEarned || 0 })
+
+  // Bracket knockout score predictions (flat ksp_* fields on the user's bracket doc)
+  const bracketSnap = await getDoc(doc(db, 'preTournamentBracket', userId))
+  if (bracketSnap.exists()) {
+    const data = bracketSnap.data()
+    for (const [key, val] of Object.entries(data)) {
+      if (key.startsWith('ksp_')) total += val || 0
+    }
+  }
+
   await updateDoc(doc(db, 'users', userId), { totalPoints: total })
 }
