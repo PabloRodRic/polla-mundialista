@@ -96,6 +96,14 @@ export default function RulesPage() {
         <p className='text-sm mb-3' style={{ color: 'var(--color-text-secondary)' }}>
           Predicciones del bracket completo (antes del torneo). Puntos aumentan por ronda:
         </p>
+        <div
+          className='rounded-lg p-3 mb-4 text-xs'
+          style={{ background: 'rgba(212,168,67,0.08)', border: '1px solid rgba(212,168,67,0.2)', color: 'var(--color-text-secondary)' }}
+        >
+          <p className='font-semibold mb-1' style={{ color: 'var(--color-gold)' }}>Regla de eliminatorias</p>
+          <p>Los goles cuentan incluyendo el tiempo extra. Los penales <strong>no cuentan</strong>.</p>
+          <p className='mt-1'>Si predices un empate (ej. 2-2), deberás indicar qué equipo avanza en penales.</p>
+        </div>
         {[
           ['Ronda de 32', knockout.preTournamentMatchResult.roundOf32],
           ['Octavos de Final', knockout.preTournamentMatchResult.roundOf16],
@@ -113,15 +121,13 @@ export default function RulesPage() {
       {/* Live knockout predictions */}
       <Section title='Predicciones en Vivo (Eliminatorias)'>
         <p className='text-sm mb-3' style={{ color: 'var(--color-text-secondary)' }}>
-          Para cada partido eliminatorio, se habilita una predicción individual:
+          Para cada partido eliminatorio, se habilita una predicción individual con su propio cierre:
         </p>
         <div
           className='rounded-lg p-3 mb-3 text-xs'
           style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}
         >
-          <p>
-            ⏰ Abre: <strong>{liveMatchTiming.opensBeforeKickoffHours}h</strong> antes del partido
-          </p>
+          <p>⏰ Abre: cuando los equipos del partido estén definidos</p>
           <p className='mt-1'>
             🔒 Cierra: <strong>{liveMatchTiming.locksBeforeKickoffHours}h</strong> antes del partido
           </p>
@@ -145,21 +151,15 @@ export default function RulesPage() {
         <PointRow label='Balón de Oro (mejor jugador)' points={individualAwards.goldenBall} />
       </Section>
 
-      {/* 90-minute rule */}
-      <Section title='Regla de los 90 Minutos'>
-        <p className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
-          En partidos eliminatorios, solo cuenta el resultado al finalizar los 90 minutos reglamentarios. El tiempo
-          extra y los penales <strong>no afectan</strong> las predicciones. Si hay empate a los 90 minutos, se considera
-          un resultado de empate.
-        </p>
-      </Section>
-
       {/* Lock rule */}
       <Section title='Cierre de Predicciones'>
         <p className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
           Las predicciones de fase de grupos y del bracket pre-torneo se cierran automáticamente cuando comienza el
-          primer partido del torneo. Las predicciones en vivo de eliminatorias se cierran{' '}
-          <strong>{liveMatchTiming.locksBeforeKickoffHours} hora</strong> antes de cada partido.
+          primer partido del torneo.
+        </p>
+        <p className='text-sm mt-2' style={{ color: 'var(--color-text-secondary)' }}>
+          Las predicciones en vivo de eliminatorias se habilitan cuando los dos equipos del partido están definidos y
+          se cierran <strong>{liveMatchTiming.locksBeforeKickoffHours} hora</strong> antes del inicio del partido.
         </p>
       </Section>
     </div>

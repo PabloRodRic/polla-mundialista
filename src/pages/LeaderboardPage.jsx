@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,7 +16,22 @@ function RankBadge({ rank }) {
   );
 }
 
-function PlayerRow({ entry, rank, isCurrentUser }) {
+function ChangeIndicator({ change }) {
+  if (!change) return null;
+  if (change > 0) return (
+    <span className='flex items-center text-xs font-semibold' style={{ color: '#4caf72', minWidth: '2rem' }}>
+      ▲{change}
+    </span>
+  );
+  if (change < 0) return (
+    <span className='flex items-center text-xs font-semibold' style={{ color: 'var(--color-accent-red)', minWidth: '2rem' }}>
+      ▼{Math.abs(change)}
+    </span>
+  );
+  return <span className='text-xs' style={{ color: 'var(--color-text-muted)', minWidth: '2rem' }}>—</span>;
+}
+
+function PlayerRow({ entry, rank, isCurrentUser, change }) {
   return (
     <div
       className='flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-colors'
@@ -63,6 +78,9 @@ function PlayerRow({ entry, rank, isCurrentUser }) {
         </p>
       </div>
 
+      {/* Position change */}
+      <ChangeIndicator change={change} />
+
       {/* Points */}
       <div className='text-right'>
         <span
@@ -99,6 +117,7 @@ function SkeletonRow() {
 export default function LeaderboardPage() {
   const { user } = useAuth();
   const [players, setPlayers] = useState([]);
+  const [rankSnapshot, setRankSnapshot] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,6 +127,13 @@ export default function LeaderboardPage() {
       snap.forEach((d) => data.push({ id: d.id, ...d.data() }));
       setPlayers(data);
       setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'leaderboard', 'rankSnapshot'), (snap) => {
+      if (snap.exists()) setRankSnapshot(snap.data());
     });
     return unsub;
   }, []);
@@ -138,9 +164,20 @@ export default function LeaderboardPage() {
           <p>Todavía no hay jugadores en la tabla.</p>
         </div>
       ) : (
-        players.map((player, i) => (
-          <PlayerRow key={player.id} entry={player} rank={i + 1} isCurrentUser={player.id === user?.uid} />
-        ))
+        players.map((player, i) => {
+          const currentRank = i + 1;
+          const prevRank = rankSnapshot[player.id];
+          const change = prevRank != null ? prevRank - currentRank : null;
+          return (
+            <PlayerRow
+              key={player.id}
+              entry={player}
+              rank={currentRank}
+              isCurrentUser={player.id === user?.uid}
+              change={change}
+            />
+          );
+        })
       )}
     </div>
   );

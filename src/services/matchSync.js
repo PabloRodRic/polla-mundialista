@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, getDocs, writeBatch,
-  query, where, Timestamp, updateDoc,
+  query, where, orderBy, Timestamp, updateDoc, setDoc,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { fetchAllMatches } from './footballApi'
@@ -228,6 +228,13 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
 
   batch.update(matchRef, { pointsCalculated: true })
   await batch.commit()
+
+  // Snapshot current leaderboard ranks before recalculating so the UI can show movement
+  const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('totalPoints', 'desc')))
+  const rankSnapshot = {}
+  let rank = 1
+  usersSnap.forEach(d => { rankSnapshot[d.id] = rank++ })
+  await setDoc(doc(db, 'leaderboard', 'rankSnapshot'), rankSnapshot)
 
   for (const userId of affectedUserIds) {
     await recalculateTotalPoints(userId)
