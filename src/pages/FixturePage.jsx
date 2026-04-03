@@ -771,8 +771,14 @@ export default function TournamentPage() {
   // ─── Save handlers ──────────────────────────────────────────────────────────
 
   function saveGroupMatchPrediction(matchId, scoreA, scoreB) {
-    if (scoreA === null && scoreB === null) return;
     if (debounceRef.current[matchId]) clearTimeout(debounceRef.current[matchId]);
+    // Require both scores — if incomplete, clear any existing partial save in Firestore
+    if (scoreA === null || scoreB === null) {
+      debounceRef.current[matchId] = setTimeout(async () => {
+        await saveGroupPrediction(user.uid, matchId, null, null);
+      }, 700);
+      return;
+    }
     setSavingMatch((s) => ({ ...s, [matchId]: true }));
     debounceRef.current[matchId] = setTimeout(async () => {
       await saveGroupPrediction(user.uid, matchId, scoreA, scoreB);

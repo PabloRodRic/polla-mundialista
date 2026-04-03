@@ -308,46 +308,42 @@ export async function calculateLivePoints(matchId, scoreA, scoreB, stage) {
 export async function resetPointsForMatch(matchId) {
   const matchRef = doc(db, 'matches', String(matchId))
   const affectedUserIds = new Set()
-  const batch = writeBatch(db)
 
-  // Reset match state so next sync (or next save) can re-score it
-  batch.update(matchRef, {
+  // 1. Reset match state
+  await updateDoc(matchRef, {
     scoreA: null,
     scoreB: null,
     status: 'upcoming',
     pointsCalculated: false,
   })
 
-  // Zero out predictions collection
+  // 2. Zero out predictions — each collection updated independently so one failure doesn't block others
   const predsSnap = await getDocs(
     query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
   )
-  predsSnap.forEach(predDoc => {
-    batch.update(predDoc.ref, { pointsEarned: 0 })
+  for (const predDoc of predsSnap.docs) {
+    await updateDoc(predDoc.ref, { pointsEarned: 0 })
     affectedUserIds.add(predDoc.data().userId)
-  })
+  }
 
-  // Zero out group predictions collection
   const groupPredsSnap = await getDocs(
     query(collection(db, 'preTournamentGroupPredictions'), where('matchId', '==', String(matchId)))
   )
-  groupPredsSnap.forEach(predDoc => {
-    batch.update(predDoc.ref, { pointsEarned: 0 })
+  for (const predDoc of groupPredsSnap.docs) {
+    await updateDoc(predDoc.ref, { pointsEarned: 0 })
     affectedUserIds.add(predDoc.data().userId)
-  })
+  }
 
-  // Zero out bracket ksp_* field for this match across all users
   const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'))
-  bracketSnap.forEach(bracketDoc => {
+  for (const bracketDoc of bracketSnap.docs) {
     const data = bracketDoc.data()
     if (`ksp_${matchId}` in data) {
-      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: 0 })
+      await updateDoc(bracketDoc.ref, { [`ksp_${matchId}`]: 0 })
       if (data.userId) affectedUserIds.add(data.userId)
     }
-  })
+  }
 
-  await batch.commit()
-
+  // 3. Recalculate totals for every affected user
   for (const userId of affectedUserIds) {
     await recalculateTotalPoints(userId)
   }

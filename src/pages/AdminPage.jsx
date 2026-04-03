@@ -307,12 +307,16 @@ export default function AdminPage() {
       showToast('No hay ajustes manuales activos', 'error');
       return;
     }
-    const promises = [];
-    snap.forEach((d) => {
-      promises.push(updateDoc(d.ref, { adminOverride: deleteField(), adminOverriddenAt: deleteField() }));
-    });
-    await Promise.all(promises);
-    showToast(`${promises.length} ajuste(s) manual(es) borrado(s)`);
+    const matchIds = [];
+    snap.forEach((d) => matchIds.push(d.id));
+    for (const matchId of matchIds) {
+      await resetPointsForMatch(matchId);
+      await updateDoc(doc(db, 'matches', matchId), {
+        adminOverride: deleteField(),
+        adminOverriddenAt: deleteField(),
+      });
+    }
+    showToast(`${matchIds.length} ajuste(s) manual(es) borrado(s)`);
   }
 
   function handleToggleAuto() {

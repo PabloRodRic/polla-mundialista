@@ -292,8 +292,14 @@ export default function PredictionsPage() {
   }
 
   function savePrediction(matchId, scoreA, scoreB) {
-    if (scoreA === null && scoreB === null) return;
     if (debounceRef.current[matchId]) clearTimeout(debounceRef.current[matchId]);
+    // Require both scores — if incomplete, clear any existing partial save in Firestore
+    if (scoreA === null || scoreB === null) {
+      debounceRef.current[matchId] = setTimeout(() => {
+        writePrediction(matchId, null, null);
+      }, 800);
+      return;
+    }
     debounceRef.current[matchId] = setTimeout(() => {
       writePrediction(matchId, scoreA, scoreB);
     }, 800);
