@@ -36,4 +36,40 @@ After the real group stage finishes and actual knockout matchups are determined:
 
 2. **Match availability** — Each knockout match gets its own live prediction that opens when the match/matchup is available in the system.
 
-3. **Lock timing** — Each live prediction locks 1 hour before that match's kickoff time. User can change their prediction freely until that lock time
+3. **Lock timing** — Each live prediction locks 1 hour before that match's kickoff time. User can change their prediction freely until that lock time.
+
+4. **Scoring** — Live prediction points stack with the pre-tournament bracket prediction points. Both contribute to the leaderboard.
+
+---
+
+## Phase 3: Rules Update
+
+Update the scoring rules and the rules page:
+
+1. **Remove the "90 minute rule"** — Delete the entire "Regla de los 90 Minutos" section from the rules page.
+
+2. **New knockout scoring rule** — In knockout matches, total goals count including extra time. Penalties do NOT count. If the user predicts a draw in full time (e.g. 2-2), they must also predict which team advances. Update both the rules page text and any scoring logic to reflect this.
+
+3. **Live prediction timing** — Make sure the rules page accurately states: live predictions open when the match is available and lock 1 hour before kickoff. (Already in scoring.json as `liveMatchTiming`.)
+
+4. **Review all rules page content** for accuracy against the updated scoring model.
+
+---
+
+## Phase 4: Leaderboard & Navigation Improvements
+
+1. **Default tab** — Make "Predicciones" the default/home tab instead of "Partidos".
+
+2. **Show results in Predictions** — Display actual match results directly in the Predictions page so users can compare their predictions vs reality.
+
+3. **Consider removing "Partidos"** — Evaluate if the Partidos page is still needed or if its content can be merged into Predictions.
+
+4. **Leaderboard position changes** — Show arrows (up/down) with the number of places each user moved since the last update.
+
+---
+
+## Phase 5: Nice-to-Haves
+
+1. **Change display name** — Allow users to update their display name from their profile/menu.
+
+2. **Light mode** — Add a light theme option as an alternative to the current dark design.

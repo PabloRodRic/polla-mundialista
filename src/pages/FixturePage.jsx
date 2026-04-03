@@ -35,6 +35,17 @@ const KNOCKOUT_ROUNDS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function formatDate(timestamp) {
+  if (!timestamp?.toDate) return '';
+  return new Intl.DateTimeFormat('es', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(timestamp.toDate());
+}
+
 function ScoreInput({ value, onChange, disabled }) {
   return (
     <input
@@ -103,10 +114,32 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
         border: `1px solid ${hasResult ? 'var(--color-pitch)' : 'var(--color-border)'}`,
       }}
     >
+      {/* Date + saving + real score */}
+      <div className='flex items-center justify-between mb-2'>
+        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+          Jornada {match.matchday} · {formatDate(match.date)}
+        </span>
+        <div className='flex items-center gap-2'>
+          {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
+          {(match.status === 'finished' || match.status === 'live') && match.scoreA !== null && (
+            <span
+              className='text-xs font-bold'
+              style={{
+                color: match.status === 'live' ? 'var(--color-accent-red)' : 'var(--color-text-secondary)',
+                fontFamily: 'var(--font-display)',
+              }}
+            >
+              {match.status === 'live' ? '🔴 ' : ''}
+              {match.scoreA} – {match.scoreB}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className='flex items-center gap-2'>
         {/* Team A */}
         <div
-          className='flex-1 flex flex-col items-center gap-1 py-1 transition-all'
+          className='flex-1 flex flex-col items-center gap-1 py-2 rounded-lg transition-all'
           style={sideStyle(homeWins, isDraw)}
         >
           {match.flagA ? (
@@ -114,14 +147,14 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
               src={`https://flagcdn.com/w80/${match.flagA}.png`}
               alt={match.teamA}
               loading='lazy'
-              className='w-8 h-6 object-cover rounded shadow'
+              className='w-10 h-7 object-cover rounded shadow'
             />
           ) : (
-            <div className='w-8 h-6 rounded' style={{ background: 'var(--color-border)' }} />
+            <div className='w-10 h-7 rounded' style={{ background: 'var(--color-border)' }} />
           )}
           <span
-            className='text-xs font-medium'
-            style={{ color: homeWins ? 'var(--color-gold)' : 'var(--color-text-primary)' }}
+            className='text-xs font-bold'
+            style={{ color: homeWins ? 'var(--color-gold)' : 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
           >
             {match.tlaA}
           </span>
@@ -136,7 +169,7 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
 
         {/* Team B */}
         <div
-          className='flex-1 flex flex-col items-center gap-1 py-2 transition-all'
+          className='flex-1 flex flex-col items-center gap-1 py-2 rounded-lg transition-all'
           style={sideStyle(awayWins, isDraw)}
         >
           {match.flagB ? (
@@ -144,35 +177,20 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
               src={`https://flagcdn.com/w80/${match.flagB}.png`}
               alt={match.teamB}
               loading='lazy'
-              className='w-8 h-6 object-cover rounded shadow'
+              className='w-10 h-7 object-cover rounded shadow'
             />
           ) : (
-            <div className='w-8 h-6 rounded' style={{ background: 'var(--color-border)' }} />
+            <div className='w-10 h-7 rounded' style={{ background: 'var(--color-border)' }} />
           )}
           <span
-            className='text-xs font-medium'
-            style={{ color: awayWins ? 'var(--color-gold)' : 'var(--color-text-primary)' }}
+            className='text-xs font-bold'
+            style={{ color: awayWins ? 'var(--color-gold)' : 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
           >
             {match.tlaB}
           </span>
         </div>
       </div>
 
-      <div className='flex justify-between mt-1.5 px-1'>
-        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-          {isDraw ? '🤝 Empate' : `Jornada ${match.matchday}`}
-        </span>
-        {locked && (
-          <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            🔒
-          </span>
-        )}
-        {saving && (
-          <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
-            Guardando...
-          </span>
-        )}
-      </div>
     </div>
   );
 }
@@ -294,6 +312,8 @@ function KnockoutMatchCard({
   onPick,
   onScoreChange,
   locked,
+  matchDate,
+  saving,
 }) {
   const bothKnown = !!(home && away);
   const sA = scoreA !== null && scoreA !== undefined ? Number(scoreA) : null;
@@ -365,6 +385,16 @@ function KnockoutMatchCard({
         border: `1px solid ${effectiveWinner ? 'var(--color-pitch)' : 'var(--color-border)'}`,
       }}
     >
+      {/* Date + saving */}
+      {(matchDate || saving) && (
+        <div className='flex items-center justify-between mb-2'>
+          <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+            {formatDate(matchDate)}
+          </span>
+          {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
+        </div>
+      )}
+
       {/* Teams + score row */}
       <div className='flex items-center gap-2'>
         {teamPanel(home, homeSlot, homeWins)}
@@ -626,6 +656,14 @@ export default function TournamentPage() {
   // Build team lookup (tla → team object)
   const teamsByTla = buildTeamLookup(groupMatches);
 
+  // Knockout matches sorted by date per stage (for date display in bracket cards)
+  const koByStage = {};
+  for (const stage of ['roundOf32', 'roundOf16', 'quarterfinals', 'semifinals', 'thirdPlace', 'final']) {
+    koByStage[stage] = matches
+      .filter((m) => m.stage === stage)
+      .sort((a, b) => (a.date?.toDate?.() || 0) - (b.date?.toDate?.() || 0));
+  }
+
   // Group standings (computed from predictions)
   const groupStandings = {};
   for (const group of GROUPS) {
@@ -740,8 +778,10 @@ export default function TournamentPage() {
   function handleKnockoutScoreChange(matchId, side, val) {
     const key = `kscore_${matchId}_${side}`;
     if (debounceRef.current[key]) clearTimeout(debounceRef.current[key]);
-    debounceRef.current[key] = setTimeout(() => {
-      saveKnockoutScore(user.uid, matchId, side, val);
+    debounceRef.current[key] = setTimeout(async () => {
+      setSavingMatch((s) => ({ ...s, [matchId]: true }));
+      await saveKnockoutScore(user.uid, matchId, side, val);
+      setSavingMatch((s) => ({ ...s, [matchId]: false }));
     }, 700);
   }
 
@@ -854,12 +894,12 @@ export default function TournamentPage() {
       {section === 'grupos' && (
         <div>
           {/* Group selector */}
-          <div className='flex gap-1.5 mb-4 flex-wrap'>
+          <div className='flex gap-2 mb-4 flex-wrap'>
             {GROUPS.map((g) => (
               <button
                 key={g}
                 onClick={() => setSelectedGroup(g)}
-                className='w-9 h-9 rounded-lg text-xs font-bold transition-colors'
+                className='w-8 h-8 rounded-lg text-xs font-bold transition-colors'
                 style={{
                   background: selectedGroup === g ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: selectedGroup === g ? '#111318' : 'var(--color-text-secondary)',
@@ -949,12 +989,12 @@ export default function TournamentPage() {
       {section === 'eliminatorias' && (
         <div>
           {/* Round selector */}
-          <div className='flex mb-4 justify-between'>
+          <div className='flex gap-2 mb-4 flex-wrap'>
             {KNOCKOUT_ROUNDS.map((r) => (
               <button
                 key={r.key}
                 onClick={() => setKnockoutRound(r.key)}
-                className='py-1.5 px-3 rounded-full text-xs font-medium transition-colors'
+                className='py-0.75 px-3 rounded-full text-xs font-medium transition-colors'
                 style={{
                   background: knockoutRound === r.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: knockoutRound === r.key ? '#111318' : 'var(--color-text-secondary)',
@@ -982,7 +1022,7 @@ export default function TournamentPage() {
                   {totalGroupMatches} predichos)
                 </div>
               )}
-              {BRACKET_R32.map((def) => {
+              {BRACKET_R32.map((def, idx) => {
                 const teams = getR32Teams(def, groupStandings, best3rdTeams);
                 return (
                   <KnockoutMatchCard
@@ -999,6 +1039,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.roundOf32[idx]?.date}
+                    saving={savingMatch[def.id] || false}
                   />
                 );
               })}
@@ -1020,7 +1062,7 @@ export default function TournamentPage() {
                   Completa la Ronda de 32 para ver los equipos en Octavos.
                 </div>
               )}
-              {BRACKET_R16.map((def) => {
+              {BRACKET_R16.map((def, idx) => {
                 const { home, away } = getKOTeams(def);
                 return (
                   <KnockoutMatchCard
@@ -1037,6 +1079,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.roundOf16[idx]?.date}
+                    saving={savingMatch[def.id] || false}
                   />
                 );
               })}
@@ -1058,7 +1102,7 @@ export default function TournamentPage() {
                   Completa Octavos para ver los Cuartos de Final.
                 </div>
               )}
-              {BRACKET_QF.map((def) => {
+              {BRACKET_QF.map((def, idx) => {
                 const { home, away } = getKOTeams(def);
                 return (
                   <KnockoutMatchCard
@@ -1075,6 +1119,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.quarterfinals[idx]?.date}
+                    saving={savingMatch[def.id] || false}
                   />
                 );
               })}
@@ -1096,7 +1142,7 @@ export default function TournamentPage() {
                   Completa Cuartos para ver las Semifinales.
                 </div>
               )}
-              {BRACKET_SF.map((def) => {
+              {BRACKET_SF.map((def, idx) => {
                 const { home, away } = getKOTeams(def);
                 return (
                   <KnockoutMatchCard
@@ -1113,6 +1159,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.semifinals[idx]?.date}
+                    saving={savingMatch[def.id] || false}
                   />
                 );
               })}
@@ -1150,6 +1198,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.thirdPlace[0]?.date}
+                    saving={savingMatch['3rd'] || false}
                   />
                 </>
               );
@@ -1189,6 +1239,8 @@ export default function TournamentPage() {
                     onPick={handleBracketPick}
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
+                    matchDate={koByStage.final[0]?.date}
+                    saving={savingMatch['final'] || false}
                   />
                 </>
               );

@@ -4,7 +4,7 @@ import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 import MatchesPage from './pages/MatchesPage';
 import PredictionsPage from './pages/PredictionsPage';
-import TournamentPage from './pages/TournamentPage';
+import FixturePage from './pages/FixturePage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import RulesPage from './pages/RulesPage';
 import AdminPage from './pages/AdminPage';
@@ -28,14 +28,14 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to='/matches' replace />} />
+        <Route index element={<Navigate to='/pronostico' replace />} />
         <Route path='/matches' element={<MatchesPage />} />
-        <Route path='/pronostico' element={<TournamentPage />} />
+        <Route path='/pronostico' element={<FixturePage />} />
         <Route path='/predictions' element={<PredictionsPage />} />
         <Route path='/leaderboard' element={<LeaderboardPage />} />
         <Route path='/rules' element={<RulesPage />} />
         <Route path='/admin' element={<AdminPage />} />
-        <Route path='*' element={<Navigate to='/matches' replace />} />
+        <Route path='*' element={<Navigate to='/pronostico' replace />} />
       </Route>
     </Routes>
   );

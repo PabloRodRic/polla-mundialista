@@ -3,16 +3,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { startAutoSync, stopAutoSync } from '../services/matchSync';
 import LeaderboardIcon from '../assets/leaderboard.svg?react';
-import MatchesIcon from '../assets/matches.svg?react';
-import PredictionsIcon from '../assets/predictions.svg?react';
+import FixtureIcon from '../assets/tournament.svg?react';
 import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
-import TournamentIcon from '../assets/tournament.svg?react';
+import PredictionIcon from '../assets/prediction.svg?react';
 
 const NAV_TABS = [
-  { path: '/matches', icon: MatchesIcon, label: 'Partidos' },
-  { path: '/pronostico', icon: TournamentIcon, label: 'Pronóstico' },
-  { path: '/predictions', icon: PredictionsIcon, label: 'Predicciones' },
+  { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
+  { path: '/predictions', icon: PredictionIcon, label: 'Predicciones' },
   { path: '/leaderboard', icon: LeaderboardIcon, label: 'Tabla' },
   { path: '/rules', icon: RulesIcon, label: 'Reglas' },
 ];
