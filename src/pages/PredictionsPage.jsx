@@ -5,15 +5,6 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { computeMatchPoints } from '../services/matchSync'
-
-function flagSrc(match, side) {
-  const flag = side === 'A' ? match.flagA : match.flagB
-  const crest = side === 'A' ? match.crestA : match.crestB
-  if (flag) return `https://flagcdn.com/w80/${flag}.png`
-  if (crest) return crest
-  return null
-}
 
 function formatDate(timestamp) {
   if (!timestamp?.toDate) return ''
@@ -135,12 +126,18 @@ function PredictionCard({ match, prediction, onSave, saving }) {
 
   const [scoreA, setScoreA] = useState(prediction?.predictedScoreA ?? null)
   const [scoreB, setScoreB] = useState(prediction?.predictedScoreB ?? null)
+  const [prevPredA, setPrevPredA] = useState(prediction?.predictedScoreA)
+  const [prevPredB, setPrevPredB] = useState(prediction?.predictedScoreB)
 
-  // Sync if prediction changes from outside (Firestore update)
-  useEffect(() => {
+  // Sync with Firestore updates during render (avoids setState-in-effect)
+  if (prediction?.predictedScoreA !== prevPredA) {
+    setPrevPredA(prediction?.predictedScoreA)
     setScoreA(prediction?.predictedScoreA ?? null)
+  }
+  if (prediction?.predictedScoreB !== prevPredB) {
+    setPrevPredB(prediction?.predictedScoreB)
     setScoreB(prediction?.predictedScoreB ?? null)
-  }, [prediction?.predictedScoreA, prediction?.predictedScoreB])
+  }
 
   function handleChange(side, val) {
     const newA = side === 'A' ? val : scoreA
