@@ -10,6 +10,7 @@
   --color-surface: #111318;
   --color-surface-card: #1a1d24;
   --color-surface-hover: #22262e;
+  --color-surface-glass: rgba(17, 19, 24, 0.93);
   --color-text-primary: #f0f2f5;
   --color-text-secondary: #8b919a;
   --color-text-muted: #5a6170;
@@ -18,6 +19,17 @@
   --color-border: #2a2e37;
   --font-display: "Unbounded", system-ui, sans-serif;
   --font-body: "DM Sans", system-ui, sans-serif;
+}
+
+[data-theme="light"] {
+  --color-surface: #f0f2f5;
+  --color-surface-card: #ffffff;
+  --color-surface-hover: #e4e8ef;
+  --color-surface-glass: rgba(240, 242, 245, 0.93);
+  --color-text-primary: #111318;
+  --color-text-secondary: #4a5260;
+  --color-text-muted: #7a8390;
+  --color-border: #d8dce6;
 }
 
 body {
