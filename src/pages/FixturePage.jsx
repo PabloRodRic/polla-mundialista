@@ -47,13 +47,30 @@ function formatDate(timestamp) {
 }
 
 function ScoreInput({ value, onChange, disabled }) {
+  const externalText = value === null || value === undefined ? '' : String(value);
+  const [text, setText] = useState(externalText);
+  const lastExternal = useRef(value);
+
+  // Sync only when parent value changes externally (e.g. Firestore update)
+  if (value !== lastExternal.current) {
+    lastExternal.current = value;
+    if (externalText !== text) setText(externalText);
+  }
+
+  function handleChange(e) {
+    const raw = e.target.value.replace(/\D/g, '').slice(0, 2);
+    setText(raw);
+    onChange(raw === '' ? null : Number(raw));
+  }
+
   return (
     <input
-      type='number'
-      min='0'
-      max='99'
-      value={value === null || value === undefined ? '' : value}
-      onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+      type='text'
+      inputMode='numeric'
+      pattern='[0-9]*'
+      maxLength={2}
+      value={text}
+      onChange={handleChange}
       disabled={disabled}
       className='w-11 h-11 text-center text-lg font-bold rounded-lg border outline-none transition-colors'
       style={{
@@ -61,7 +78,6 @@ function ScoreInput({ value, onChange, disabled }) {
         border: `2px solid ${disabled ? 'var(--color-border)' : 'var(--color-pitch)'}`,
         color: disabled ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
         fontFamily: 'var(--font-display)',
-        MozAppearance: 'textfield',
       }}
     />
   );
@@ -314,8 +330,8 @@ function KnockoutMatchCard({
   away,
   homeSlot,
   awaySlot,
-  scoreA,
-  scoreB,
+  scoreA: propScoreA,
+  scoreB: propScoreB,
   effectiveWinner,
   tiebreakerPick,
   onPick,
@@ -324,14 +340,33 @@ function KnockoutMatchCard({
   matchDate,
   saving,
 }) {
+  const [scoreA, setScoreA] = useState(propScoreA ?? null);
+  const [scoreB, setScoreB] = useState(propScoreB ?? null);
+  const [prevA, setPrevA] = useState(propScoreA);
+  const [prevB, setPrevB] = useState(propScoreB);
+
+  // Sync from Firestore updates
+  if (propScoreA !== prevA) { setPrevA(propScoreA); setScoreA(propScoreA ?? null); }
+  if (propScoreB !== prevB) { setPrevB(propScoreB); setScoreB(propScoreB ?? null); }
+
+  function handleScoreChange(side, val) {
+    if (side === 'A') setScoreA(val);
+    else setScoreB(val);
+    onScoreChange(matchId, side, val);
+  }
+
   const bothKnown = !!(home && away);
   const sA = scoreA !== null && scoreA !== undefined ? Number(scoreA) : null;
   const sB = scoreB !== null && scoreB !== undefined ? Number(scoreB) : null;
   const hasScores = sA !== null && sB !== null;
   const isTie = hasScores && sA === sB;
 
-  const homeWins = effectiveWinner === home?.tla;
-  const awayWins = effectiveWinner === away?.tla;
+  // Compute winner locally for immediate UI feedback
+  const localWinner = hasScores
+    ? sA > sB ? home?.tla : sA < sB ? away?.tla : tiebreakerPick
+    : effectiveWinner;
+  const homeWins = localWinner === home?.tla;
+  const awayWins = localWinner === away?.tla;
 
   function teamPanel(team, slotKey, isWinner) {
     if (!team) {
@@ -411,9 +446,9 @@ function KnockoutMatchCard({
         <div className='flex flex-col items-center gap-1'>
           {bothKnown ? (
             <div className='flex items-center gap-1.5'>
-              <ScoreInput value={scoreA} onChange={(v) => onScoreChange(matchId, 'A', v)} disabled={locked} />
+              <ScoreInput value={scoreA} onChange={(v) => handleScoreChange('A', v)} disabled={locked} />
               <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>–</span>
-              <ScoreInput value={scoreB} onChange={(v) => onScoreChange(matchId, 'B', v)} disabled={locked} />
+              <ScoreInput value={scoreB} onChange={(v) => handleScoreChange('B', v)} disabled={locked} />
             </div>
           ) : (
             <span className='text-xs font-semibold' style={{ color: 'var(--color-text-muted)' }}>
