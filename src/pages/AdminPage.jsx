@@ -262,7 +262,7 @@ function MatchOverrideCard({ match, onSave }) {
           className='flex-1 py-2 rounded-lg text-sm font-semibold transition-opacity'
           style={{
             background: 'var(--color-pitch)',
-            color: 'var(--color-text-primary)',
+            color: '#ffffff',
             opacity: saving || clearing ? 0.6 : 1,
           }}
         >

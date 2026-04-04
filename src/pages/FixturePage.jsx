@@ -109,6 +109,9 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
     onSave(match.id, newA, newB);
   }
 
+  const isCancelled = match.status === 'cancelled';
+  const isDisabled = locked || isCancelled;
+
   const sA = scoreA !== null && scoreA !== undefined ? Number(scoreA) : null;
   const sB = scoreB !== null && scoreB !== undefined ? Number(scoreB) : null;
   const hasResult = sA !== null && sB !== null;
@@ -127,7 +130,8 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
       className='rounded-xl p-3 mb-2'
       style={{
         background: 'var(--color-surface-card)',
-        border: `1px solid ${hasResult ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+        border: `1px solid ${isCancelled ? 'var(--color-border)' : hasResult ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+        opacity: isCancelled ? 0.5 : 1,
       }}
     >
       {/* Date + saving */}
@@ -135,7 +139,10 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
         <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
           Jornada {match.matchday} · {formatDate(match.date)}
         </span>
-        {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
+        {isCancelled
+          ? <span className='text-xs' style={{ color: 'var(--color-accent-red)' }}>Cancelado</span>
+          : saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>
+        }
       </div>
 
       <div className='flex items-center gap-2'>
@@ -164,9 +171,9 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
 
         {/* Score inputs */}
         <div className='flex items-center gap-1.5'>
-          <ScoreInput value={scoreA} onChange={(v) => handleChange('A', v)} disabled={locked} />
+          <ScoreInput value={scoreA} onChange={(v) => handleChange('A', v)} disabled={isDisabled} />
           <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>–</span>
-          <ScoreInput value={scoreB} onChange={(v) => handleChange('B', v)} disabled={locked} />
+          <ScoreInput value={scoreB} onChange={(v) => handleChange('B', v)} disabled={isDisabled} />
         </div>
 
         {/* Team B */}
@@ -342,12 +349,25 @@ function KnockoutMatchCard({
 }) {
   const [scoreA, setScoreA] = useState(propScoreA ?? null);
   const [scoreB, setScoreB] = useState(propScoreB ?? null);
-  const [prevA, setPrevA] = useState(propScoreA);
-  const [prevB, setPrevB] = useState(propScoreB);
+  const prevARef = useRef(propScoreA);
+  const prevBRef = useRef(propScoreB);
+  const prevHomeTla = useRef(home?.tla ?? null);
+  const prevAwayTla = useRef(away?.tla ?? null);
 
-  // Sync from Firestore updates
-  if (propScoreA !== prevA) { setPrevA(propScoreA); setScoreA(propScoreA ?? null); }
-  if (propScoreB !== prevB) { setPrevB(propScoreB); setScoreB(propScoreB ?? null); }
+  // When teams change, reset scores — stale scores from a previous lineup shouldn't persist
+  const teamChanged = home?.tla !== prevHomeTla.current || away?.tla !== prevAwayTla.current;
+  if (teamChanged) {
+    prevHomeTla.current = home?.tla ?? null;
+    prevAwayTla.current = away?.tla ?? null;
+    prevARef.current = propScoreA ?? null;
+    prevBRef.current = propScoreB ?? null;
+    setScoreA(null);
+    setScoreB(null);
+  } else {
+    // Sync from Firestore updates (only when teams haven't changed)
+    if (propScoreA !== prevARef.current) { prevARef.current = propScoreA; setScoreA(propScoreA ?? null); }
+    if (propScoreB !== prevBRef.current) { prevBRef.current = propScoreB; setScoreB(propScoreB ?? null); }
+  }
 
   function handleScoreChange(side, val) {
     if (side === 'A') setScoreA(val);
@@ -361,10 +381,10 @@ function KnockoutMatchCard({
   const hasScores = sA !== null && sB !== null;
   const isTie = hasScores && sA === sB;
 
-  // Compute winner locally for immediate UI feedback
+  // Compute winner locally for immediate UI feedback — no scores means no winner
   const localWinner = hasScores
     ? sA > sB ? home?.tla : sA < sB ? away?.tla : tiebreakerPick
-    : effectiveWinner;
+    : null;
   const homeWins = localWinner === home?.tla;
   const awayWins = localWinner === away?.tla;
 
@@ -591,12 +611,15 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         className='rounded-xl p-4'
         style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
       >
-        <h3
-          className='text-sm font-semibold mb-3'
-          style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
-        >
-          Premios Individuales
-        </h3>
+        <div className='flex items-center gap-2 mb-3'>
+          <h3
+            className='text-sm font-semibold'
+            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
+          >
+            Premios Individuales
+          </h3>
+          {locked && <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>🔒</span>}
+        </div>
         <div className='space-y-3'>
           {[
             { label: '⚽ Bota de Oro', key: 'boot', value: goldenBoot, setter: setGoldenBoot },
@@ -754,7 +777,7 @@ export default function TournamentPage() {
       if (nA < nB) return awayTla || null;
       return picks[matchId] || null; // tie → use stored tiebreaker
     }
-    return picks[matchId] || null; // no score → use stored pick
+    return null; // no score → no winner, don't cascade stale pick
   }
 
   const effectivePicks = {};
