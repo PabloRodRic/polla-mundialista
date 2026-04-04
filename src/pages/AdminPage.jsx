@@ -10,6 +10,7 @@ import {
   calculatePointsForMatch,
   calculateLivePoints,
   resetPointsForMatch,
+  calculateAwardPoints,
   getSyncStatus,
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
@@ -78,6 +79,7 @@ function MatchOverrideCard({ match, onSave }) {
   const [scoreA, setScoreA] = useState(match.scoreA ?? '');
   const [scoreB, setScoreB] = useState(match.scoreB ?? '');
   const [status, setStatus] = useState(match.status);
+  const [winner, setWinner] = useState(match.winner ?? 'auto');
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -86,7 +88,8 @@ function MatchOverrideCard({ match, onSave }) {
     setScoreA(match.scoreA ?? '');
     setScoreB(match.scoreB ?? '');
     setStatus(match.status);
-  }, [match.scoreA, match.scoreB, match.status]);
+    setWinner(match.winner ?? 'auto');
+  }, [match.scoreA, match.scoreB, match.status, match.winner]);
 
   // Auto-switch to finished when both scores are entered
   function handleScoreChange(side, val) {
@@ -113,6 +116,8 @@ function MatchOverrideCard({ match, onSave }) {
         updates.scoreA = Number(scoreA);
         updates.scoreB = Number(scoreB);
       }
+      // Store penalty winner when scores are level; 'auto' means derive from score
+      updates.winner = winner !== 'auto' ? winner : null;
       await updateDoc(matchRef, updates);
 
       if (status === 'finished' && scoreA !== '' && scoreB !== '') {
@@ -223,6 +228,29 @@ function MatchOverrideCard({ match, onSave }) {
         />
       </div>
 
+      {/* Penalty winner — shown for finished knockout matches so admin can record shootout result */}
+      {status === 'finished' && match.stage !== 'group' && (
+        <div className='flex items-center gap-2 mb-3'>
+          <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+            Ganador (penales):
+          </span>
+          <select
+            value={winner}
+            onChange={(e) => setWinner(e.target.value)}
+            className='text-xs rounded-lg px-2 py-1 border-0 outline-none'
+            style={{
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <option value='auto'>Auto (por marcador)</option>
+            <option value='home'>{match.tlaA || match.teamA} gana</option>
+            <option value='away'>{match.tlaB || match.teamB} gana</option>
+          </select>
+        </div>
+      )}
+
       <div className='flex gap-2'>
         <button
           onClick={handleSave}
@@ -252,6 +280,88 @@ function MatchOverrideCard({ match, onSave }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function AwardsCard({ onSave }) {
+  const [goldenBoot, setGoldenBoot] = useState('');
+  const [goldenBall, setGoldenBall] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    if (!goldenBoot.trim() && !goldenBall.trim()) return;
+    setSaving(true);
+    try {
+      await calculateAwardPoints(goldenBoot.trim(), goldenBall.trim());
+      onSave?.('Premios individuales guardados');
+    } catch (err) {
+      console.error('Error saving awards:', err);
+      onSave?.('Error al guardar premios', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className='rounded-xl p-4 mb-4'
+      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+    >
+      <h2 className='text-xs font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-gold)' }}>
+        Premios Individuales
+      </h2>
+      <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
+        Ingresar ganadores reales para calcular puntos. Ejecutar una vez que FIFA los anuncie.
+      </p>
+      <div className='space-y-3 mb-4'>
+        <div>
+          <label className='block text-xs mb-1' style={{ color: 'var(--color-text-secondary)' }}>
+            Bota de Oro (nombre del jugador)
+          </label>
+          <input
+            type='text'
+            placeholder='Ej: Lionel Messi'
+            value={goldenBoot}
+            onChange={e => setGoldenBoot(e.target.value)}
+            className='w-full px-3 py-2 rounded-lg text-sm border-0 outline-none'
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-primary)',
+            }}
+          />
+        </div>
+        <div>
+          <label className='block text-xs mb-1' style={{ color: 'var(--color-text-secondary)' }}>
+            Balón de Oro (nombre del jugador)
+          </label>
+          <input
+            type='text'
+            placeholder='Ej: Kylian Mbappé'
+            value={goldenBall}
+            onChange={e => setGoldenBall(e.target.value)}
+            className='w-full px-3 py-2 rounded-lg text-sm border-0 outline-none'
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-primary)',
+            }}
+          />
+        </div>
+      </div>
+      <button
+        onClick={handleSave}
+        disabled={saving || (!goldenBoot.trim() && !goldenBall.trim())}
+        className='w-full py-2 rounded-lg text-sm font-semibold transition-opacity'
+        style={{
+          background: 'var(--color-gold)',
+          color: '#111318',
+          opacity: saving || (!goldenBoot.trim() && !goldenBall.trim()) ? 0.5 : 1,
+        }}
+      >
+        {saving ? 'Guardando...' : 'Guardar y calcular puntos'}
+      </button>
     </div>
   );
 }
@@ -413,6 +523,9 @@ export default function AdminPage() {
 
       {/* Status card */}
       <StatusCard syncStatus={syncStatus} autoPaused={autoPaused} onToggleAuto={handleToggleAuto} />
+
+      {/* Individual awards */}
+      <AwardsCard onSave={(msg, type) => showToast(msg, type)} />
 
       {/* Manual overrides */}
       <h2 className='text-sm font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-text-muted)' }}>
