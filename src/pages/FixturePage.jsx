@@ -772,11 +772,9 @@ export default function TournamentPage() {
 
   function saveGroupMatchPrediction(matchId, scoreA, scoreB) {
     if (debounceRef.current[matchId]) clearTimeout(debounceRef.current[matchId]);
-    // Require both scores — if incomplete, clear any existing partial save in Firestore
+    // Require both scores before saving — don't write to Firestore with incomplete data
+    // (writing null/null causes the Firestore listener to reset local state mid-edit)
     if (scoreA === null || scoreB === null) {
-      debounceRef.current[matchId] = setTimeout(async () => {
-        await saveGroupPrediction(user.uid, matchId, null, null);
-      }, 700);
       return;
     }
     setSavingMatch((s) => ({ ...s, [matchId]: true }));
