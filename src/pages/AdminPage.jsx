@@ -163,8 +163,12 @@ function MatchOverrideCard({ match, onSave }) {
       <div className='flex items-start justify-between mb-3 gap-2'>
         <div>
           <div className='flex items-center gap-2'>
-            <p className='text-sm font-semibold' style={{ color: 'var(--color-text-primary)' }}>
-              {match.tlaA || match.teamA} vs {match.tlaB || match.teamB}
+            <p className='text-sm font-semibold flex items-center gap-1.5' style={{ color: 'var(--color-text-primary)' }}>
+              {match.flagA && <img src={`https://flagcdn.com/w40/${match.flagA}.png`} className='w-5 h-3.5 object-cover rounded' />}
+              {match.tlaA || match.teamA}
+              <span style={{ color: 'var(--color-text-muted)' }}>vs</span>
+              {match.flagB && <img src={`https://flagcdn.com/w40/${match.flagB}.png`} className='w-5 h-3.5 object-cover rounded' />}
+              {match.tlaB || match.teamB}
             </p>
             {match.adminOverride && (
               <span
