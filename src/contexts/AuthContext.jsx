@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { auth, googleProvider, db } from '../config/firebase'
 
 const AuthContext = createContext(null)
@@ -52,8 +52,12 @@ export function AuthProvider({ children }) {
     await signOut(auth)
   }
 
+  async function updateDisplayName(name) {
+    await updateDoc(doc(db, 'users', user.uid), { name })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, logout, updateDisplayName }}>
       {children}
     </AuthContext.Provider>
   )

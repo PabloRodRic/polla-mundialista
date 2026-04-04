@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { startAutoSync, stopAutoSync } from '../services/matchSync';
@@ -16,9 +16,12 @@ const NAV_TABS = [
 ];
 
 export default function Layout() {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, updateDisplayName } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const nameInputRef = useRef(null);
 
   // Start auto-sync for admin users
   useEffect(() => {
@@ -33,6 +36,20 @@ export default function Layout() {
   async function handleLogout() {
     await logout();
     navigate('/login');
+  }
+
+  function openEditName() {
+    setNameInput(profile?.name || '');
+    setEditingName(true);
+    setMenuOpen(false);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  }
+
+  async function handleSaveName(e) {
+    e.preventDefault();
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== profile?.name) await updateDisplayName(trimmed);
+    setEditingName(false);
   }
 
   return (
@@ -57,7 +74,7 @@ export default function Layout() {
             {user?.photoURL ? (
               <img
                 src={user.photoURL}
-                alt={user.displayName}
+                alt={profile?.name}
                 className='w-8 h-8 rounded-full object-cover'
                 style={{ border: '2px solid var(--color-border)' }}
               />
@@ -66,7 +83,7 @@ export default function Layout() {
                 className='w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold'
                 style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
               >
-                {user?.displayName?.[0] || '?'}
+                {profile?.name?.[0] || '?'}
               </div>
             )}
           </button>
@@ -79,8 +96,16 @@ export default function Layout() {
                 style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
               >
                 <div className='px-4 py-2 text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
-                  {user?.displayName}
+                  {profile?.name}
                 </div>
+                <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                <button
+                  onClick={openEditName}
+                  className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  Cambiar nombre
+                </button>
                 <div style={{ borderTop: '1px solid var(--color-border)' }} />
                 <button
                   onClick={handleLogout}
@@ -99,6 +124,36 @@ export default function Layout() {
       <main className='flex-1 overflow-y-auto' style={{ paddingBottom: '72px' }}>
         <Outlet />
       </main>
+
+      {/* Edit name modal */}
+      {editingName && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center' style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setEditingName(false)}>
+          <form
+            onClick={e => e.stopPropagation()}
+            onSubmit={handleSaveName}
+            className='rounded-2xl p-6 w-72 flex flex-col gap-4'
+            style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+          >
+            <p className='text-sm font-semibold' style={{ color: 'var(--color-text)' }}>Cambiar nombre</p>
+            <input
+              ref={nameInputRef}
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              maxLength={40}
+              className='rounded-lg px-3 py-2 text-sm outline-none w-full'
+              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+            />
+            <div className='flex gap-2 justify-end'>
+              <button type='button' onClick={() => setEditingName(false)} className='px-4 py-1.5 rounded-lg text-sm' style={{ color: 'var(--color-text-muted)' }}>
+                Cancelar
+              </button>
+              <button type='submit' className='px-4 py-1.5 rounded-lg text-sm font-semibold' style={{ background: 'var(--color-gold)', color: '#111318' }}>
+                Guardar
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Bottom tab bar */}
       <nav
