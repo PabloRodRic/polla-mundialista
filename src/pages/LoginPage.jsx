@@ -214,7 +214,7 @@ export default function LoginPage() {
         className='relative z-10 mt-5 text-xs tracking-widest uppercase'
         style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-display)', fontSize: '0.6rem' }}
       >
-        USA · México · Canadá 2026
+        PABLORODRIC 2026
       </p>
       {/* Spinning trionda */}
       <img
