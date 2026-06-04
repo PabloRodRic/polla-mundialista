@@ -722,9 +722,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         style={{
           background: 'var(--color-surface-card)',
           border: `1px solid ${
-            !locked && (!goldenBoot.trim() || !goldenBall.trim())
-              ? 'var(--color-accent-red)'
-              : 'var(--color-border)'
+            !locked && (!goldenBoot.trim() || !goldenBall.trim()) ? 'var(--color-accent-red)' : 'var(--color-border)'
           }`,
         }}
       >
@@ -1092,7 +1090,18 @@ export default function TournamentPage() {
           </span>
         </div>
       </div>
-
+      {roundIncomplete && (
+        <div
+          className='mb-3 rounded-lg p-3 text-xs text-center'
+          style={{
+            background: 'rgba(212,168,67,0.08)',
+            border: '1px solid rgba(212,168,67,0.3)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          Todos los pronósticos se cerraran al iniciar el mundial. ¡Ponte Pilas!
+        </div>
+      )}
       {/* Section tabs */}
       <div className='flex gap-2 mb-5'>
         {SECTIONS.map((s) => (
@@ -1142,7 +1151,6 @@ export default function TournamentPage() {
               </button>
             ))}
           </div>
-
           {/* Matches for selected group */}
           <h2
             className='text-xs font-semibold mb-2 uppercase tracking-wider'
