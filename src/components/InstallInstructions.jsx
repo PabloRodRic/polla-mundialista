@@ -9,6 +9,9 @@ const IOS_STEPS = [
     Deslizá hacia abajo y elegí <strong>Añadir a pantalla de inicio</strong> <PlusIcon />.
   </>,
   <>
+    Activá <strong>Abrir como aplicación web</strong> (o <strong>Guardar como app</strong>) si aparece la opción.
+  </>,
+  <>
     Tocá <strong>Añadir</strong> arriba a la derecha. ¡Listo!
   </>,
 ];
