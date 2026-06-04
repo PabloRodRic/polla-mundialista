@@ -378,6 +378,8 @@ export default function AdminPage() {
   const [autoPaused, setAutoPaused] = useState(false);
   const [matchFilter, setMatchFilter] = useState('all');
   const [toast, setToast] = useState(null);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     const unsub = onSyncStatusChange(setSyncStatus);
@@ -431,6 +433,22 @@ export default function AdminPage() {
       });
     }
     showToast(`${matchIds.length} ajuste(s) manual(es) borrado(s)`);
+  }
+
+  async function handleResetAllPoints() {
+    setResetting(true);
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const updates = [];
+      usersSnap.forEach((d) => updates.push(updateDoc(doc(db, 'users', d.id), { totalPoints: 0 })));
+      await Promise.all(updates);
+      showToast(`Puntos reseteados (${updates.length} usuarios)`);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    } finally {
+      setResetting(false);
+      setShowResetDialog(false);
+    }
   }
 
   function handleToggleAuto() {
@@ -515,7 +533,7 @@ export default function AdminPage() {
       {/* [TEMP] Clear all overrides */}
       <button
         onClick={handleClearAllOverrides}
-        className='w-full py-2 rounded-xl text-xs font-medium mb-4 transition-opacity'
+        className='w-full py-2 rounded-xl text-xs font-medium mb-2 transition-opacity'
         style={{
           background: 'rgba(231,76,60,0.1)',
           color: 'var(--color-accent-red)',
@@ -524,6 +542,65 @@ export default function AdminPage() {
       >
         [TEST] Borrar todos los ajustes manuales
       </button>
+
+      {/* [TEMP] Reset all points */}
+      <button
+        onClick={() => setShowResetDialog(true)}
+        className='w-full py-2 rounded-xl text-xs font-medium mb-4 transition-opacity'
+        style={{
+          background: 'rgba(231,76,60,0.1)',
+          color: 'var(--color-accent-red)',
+          border: '1px solid var(--color-accent-red)',
+        }}
+      >
+        [TEST] Resetear puntos de todos los usuarios
+      </button>
+
+      {/* Reset points confirmation dialog */}
+      {showResetDialog && (
+        <div
+          className='fixed inset-0 z-50 flex items-center justify-center px-4'
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+        >
+          <div
+            className='w-full max-w-sm rounded-2xl p-6'
+            style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-accent-red)' }}
+          >
+            <p className='text-base font-bold mb-2' style={{ color: 'var(--color-text-primary)' }}>
+              ¿Resetear todos los puntos?
+            </p>
+            <p className='text-sm mb-5' style={{ color: 'var(--color-text-muted)' }}>
+              Esto pondrá <strong>totalPoints = 0</strong> en todos los usuarios. Esta acción no se puede deshacer.
+            </p>
+            <div className='flex gap-3'>
+              <button
+                onClick={() => setShowResetDialog(false)}
+                disabled={resetting}
+                className='flex-1 py-2 rounded-xl text-sm font-medium'
+                style={{
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-secondary)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleResetAllPoints}
+                disabled={resetting}
+                className='flex-1 py-2 rounded-xl text-sm font-semibold transition-opacity'
+                style={{
+                  background: 'var(--color-accent-red)',
+                  color: '#fff',
+                  opacity: resetting ? 0.6 : 1,
+                }}
+              >
+                {resetting ? 'Reseteando...' : 'Sí, resetear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status card */}
       <StatusCard syncStatus={syncStatus} autoPaused={autoPaused} onToggleAuto={handleToggleAuto} />
