@@ -676,7 +676,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         className='rounded-xl p-4'
         style={{
           background: 'var(--color-surface-card)',
-          border: '1px solid var(--color-gold)',
+          border: '1px solid var(--color-border)',
         }}
       >
         <div className='flex items-center gap-2 mb-1'>
