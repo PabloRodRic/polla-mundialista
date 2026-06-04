@@ -552,8 +552,8 @@ function KnockoutMatchCard({
 // ─── Baby gender selector ──────────────────────────────────────────────────────
 
 const BABY_OPTIONS = [
-  { value: 'girl', label: 'Niña', emoji: '👧', color: '#e84393' },
-  { value: 'boy', label: 'Niño', emoji: '👦', color: 'var(--color-accent-blue)' },
+  { value: 'girl', label: 'Niña', emoji: '👧🏻', color: '#e84393' },
+  { value: 'boy', label: 'Niño', emoji: '👦🏻', color: 'var(--color-accent-blue)' },
 ];
 
 function BabyGenderSelector({ value, onChange, disabled }) {

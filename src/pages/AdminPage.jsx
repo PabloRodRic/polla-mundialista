@@ -312,6 +312,8 @@ function AwardsCard({ onSave }) {
   const [goldenBall, setGoldenBall] = useState('');
   const [babyGender, setBabyGender] = useState('');
   const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [hasStored, setHasStored] = useState(false);
 
   // Prefill with the current official results so a partial save doesn't wipe the rest
   useEffect(() => {
@@ -321,6 +323,7 @@ function AwardsCard({ onSave }) {
       setGoldenBoot(data.goldenBoot || '');
       setGoldenBall(data.goldenBall || '');
       setBabyGender(data.babyGender || '');
+      setHasStored(!!(data.goldenBoot || data.goldenBall || data.babyGender));
     });
   }, []);
 
@@ -331,12 +334,31 @@ function AwardsCard({ onSave }) {
     setSaving(true);
     try {
       await calculateAwardPoints(goldenBoot.trim(), goldenBall.trim(), babyGender);
+      setHasStored(true);
       onSave?.('Premios individuales guardados');
     } catch (err) {
       console.error('Error saving awards:', err);
       onSave?.('Error al guardar premios', 'error');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Clears the official awards (boot/ball/baby) and zeroes out their points for everyone.
+  async function handleClear() {
+    setClearing(true);
+    try {
+      await calculateAwardPoints('', '', '');
+      setGoldenBoot('');
+      setGoldenBall('');
+      setBabyGender('');
+      setHasStored(false);
+      onSave?.('Premios borrados');
+    } catch (err) {
+      console.error('Error clearing awards:', err);
+      onSave?.('Error al borrar premios', 'error');
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -417,16 +439,31 @@ function AwardsCard({ onSave }) {
       </div>
       <button
         onClick={handleSave}
-        disabled={saving || nothingSet}
+        disabled={saving || clearing || nothingSet}
         className='w-full py-2 rounded-lg text-sm font-semibold transition-opacity'
         style={{
           background: 'var(--color-gold)',
           color: '#111318',
-          opacity: saving || nothingSet ? 0.5 : 1,
+          opacity: saving || clearing || nothingSet ? 0.5 : 1,
         }}
       >
         {saving ? 'Guardando...' : 'Guardar y calcular puntos'}
       </button>
+      {(hasStored || !nothingSet) && (
+        <button
+          onClick={handleClear}
+          disabled={saving || clearing}
+          className='w-full mt-2 py-2 rounded-lg text-xs font-medium transition-opacity'
+          style={{
+            background: 'transparent',
+            color: 'var(--color-accent-red)',
+            border: '1px solid var(--color-border)',
+            opacity: saving || clearing ? 0.5 : 1,
+          }}
+        >
+          {clearing ? 'Borrando...' : 'Borrar premios (Bota, Balón y bebé)'}
+        </button>
+      )}
     </div>
   );
 }
