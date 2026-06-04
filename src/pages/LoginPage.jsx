@@ -107,7 +107,10 @@ export default function LoginPage() {
           </h1>
           <p className=' text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
             Predice los resultados del Mundial 2026.
-            <br />Y el sexo de Frijolita/o Rodríguez Terán
+            <br />
+            <strong style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              Y el sexo de Frijolita/o Rodríguez Terán
+            </strong>
           </p>
         </div>
 
