@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import trionda from '../assets/trionda.png';
+import logo from '../assets/logo-no-bg.png';
+import InstallInstructions from '../components/InstallInstructions';
 
 const FLAGS = [
   { code: 'ar', top: '8%', left: '5%', delay: '0s' },
@@ -17,6 +19,7 @@ export default function LoginPage() {
   const { loginWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
 
   async function handleLogin() {
     setLoading(true);
@@ -81,14 +84,8 @@ export default function LoginPage() {
 
       {/* Main card */}
       <div className='relative z-10 w-full max-w-sm flex flex-col items-center gap-6 -mt-50'>
-        {/* Spinning trionda */}
-        <img
-          src={trionda}
-          alt='Trionda'
-          className='w-16 h-16 object-contain'
-          style={{ animation: 'spinSlow 12s linear infinite' }}
-        />
-
+        {/* Logo */}
+        <img src={logo} alt='Logo' className='w-60 h-60 object-contain' />
         {/* Titles */}
         <div className='text-center'>
           <p
@@ -106,7 +103,9 @@ export default function LoginPage() {
             </span>
           </h1>
           <p className='mt-3 text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
-            Predice los resultados del Mundial 2026
+            Predice los resultados del Mundial 2026.
+            <br />
+            Y el sexo de Frijolita/o Rodríguez Terán
           </p>
         </div>
 
@@ -167,14 +166,35 @@ export default function LoginPage() {
         )}
       </div>
 
+      {/* Install CTA */}
+      <button
+        onClick={() => setShowInstall(true)}
+        className='relative z-10 mt-8 flex items-center gap-1.5 text-sm font-medium transition-colors duration-150'
+        style={{ color: 'var(--color-gold)' }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-gold-light)')}
+        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-gold)')}
+      >
+        <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+          <path d='M12 3v12M12 15l-4-4M12 15l4-4' strokeLinecap='round' strokeLinejoin='round' />
+          <path d='M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2' strokeLinecap='round' strokeLinejoin='round' />
+        </svg>
+        ¿Cómo instalar la app?
+      </button>
+
       {/* Footer */}
       <p
-        className='relative z-10 mt-8 text-xs tracking-widest uppercase'
+        className='relative z-10 mt-5 text-xs tracking-widest uppercase'
         style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-display)', fontSize: '0.6rem' }}
       >
         USA · México · Canadá 2026
       </p>
-
+      {/* Spinning trionda */}
+      <img
+        src={trionda}
+        alt='Trionda'
+        className='w-10 h-10 mt-4 object-contain'
+        style={{ animation: 'spinSlow 12s linear infinite' }}
+      />
       <style>{`
         @keyframes floatFlag {
           0%, 100% { transform: translateY(0px) rotate(-3deg); }
@@ -189,6 +209,9 @@ export default function LoginPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {/* Install instructions modal */}
+      {showInstall && <InstallInstructions onClose={() => setShowInstall(false)} />}
     </div>
   );
 }
