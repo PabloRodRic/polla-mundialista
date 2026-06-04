@@ -69,7 +69,6 @@ function ScoreInput({ value, onChange, disabled }) {
   );
 }
 
-
 function TeamSlot({ match, side }) {
   const flag = side === 'A' ? match.flagA : match.flagB;
   const tla = side === 'A' ? match.tlaA : match.tlaB;
@@ -335,12 +334,7 @@ export default function PredictionsPage() {
   );
   const upcomingMatches = nextStage ? matches.filter((m) => m.stage === nextStage) : [];
 
-  const filtered =
-    filter === 'all'
-      ? matches
-      : filter === 'upcoming'
-        ? upcomingMatches
-        : finishedMatches;
+  const filtered = filter === 'all' ? matches : filter === 'upcoming' ? upcomingMatches : finishedMatches;
 
   const pendingCount = availableMatches.filter((m) => !predictions[m.id]).length;
 
@@ -390,7 +384,7 @@ export default function PredictionsPage() {
             Acá vas a marcar el resultado de cada partido de eliminatoria en vivo, hasta una hora antes de que empiece.
           </p>
           <p className='text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
-            Por ahora, completá <strong>todos</strong> tus pronósticos de grupos, llaves y premios en el tab de{' '}
+            Por ahora, completa <strong>todos</strong> tus pronósticos de grupos, llaves y premios en el tab de{' '}
             <strong style={{ color: 'var(--color-gold)' }}>Pronóstico</strong>.
           </p>
           {tournamentStart && (
@@ -430,9 +424,7 @@ export default function PredictionsPage() {
 
           {filtered.length === 0 ? (
             <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
-              <p className='text-4xl mb-3'>
-                {filter === 'upcoming' ? '📅' : filter === 'finished' ? '✅' : '📝'}
-              </p>
+              <p className='text-4xl mb-3'>{filter === 'upcoming' ? '📅' : filter === 'finished' ? '✅' : '📝'}</p>
               <p>
                 {filter === 'upcoming'
                   ? 'No hay partidos próximos pendientes.'

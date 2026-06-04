@@ -640,19 +640,36 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
     setTimeout(() => setSaved(false), 2000);
   }
 
+  const dirty =
+    goldenBoot.trim() !== (bracketData?.goldenBoot || '') ||
+    goldenBall.trim() !== (bracketData?.goldenBall || '') ||
+    babyGender !== (bracketData?.babyGender || '');
+  const manualIncomplete = !babyGender || !goldenBoot.trim() || !goldenBall.trim();
+
   return (
     <div className='space-y-4'>
-      {/* Tournament outcome - auto-derived from bracket */}
+      {/* 1. Tournament outcome — auto-derived from bracket */}
       <div
         className='rounded-xl p-4'
         style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
       >
-        <h3
-          className='text-sm font-semibold mb-3'
-          style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
-        >
-          Resultado del Torneo
-        </h3>
+        <div className='flex items-center justify-between mb-1'>
+          <h3
+            className='text-sm font-semibold'
+            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
+          >
+            Resultado del Torneo
+          </h3>
+          <span
+            className='text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full'
+            style={{ background: 'rgba(13,107,63,0.18)', color: 'var(--color-pitch-light)' }}
+          >
+            ⚙︎ Automático
+          </span>
+        </div>
+        <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
+          Se completa solo con tu bracket de eliminatorias — no tienes que llenar nada aqui.
+        </p>
         <div className='space-y-2'>
           {[
             { label: '🏆 Campeón', team: champion },
@@ -689,56 +706,79 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         </div>
       </div>
 
-      {/* Baby gender — special prediction */}
+      {/* 2. Manual predictions — baby + golden boot/ball, saved together */}
       <div
         className='rounded-xl p-4'
         style={{
           background: 'var(--color-surface-card)',
-          border: `1px solid ${!locked && !babyGender ? 'var(--color-accent-red)' : 'var(--color-border)'}`,
+          border: `1px solid ${!locked && manualIncomplete ? 'var(--color-accent-red)' : 'var(--color-border)'}`,
         }}
       >
-        <div className='flex items-center gap-2 mb-1'>
+        <div className='flex items-center justify-between mb-1'>
           <h3
             className='text-sm font-semibold'
             style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
           >
-            👶🏻 El bebé será...
+            Premios Inividuales
           </h3>
-          {locked && (
+          {locked ? (
             <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-              🔒
+              🔒 Cerrado
+            </span>
+          ) : (
+            <span
+              className='text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full'
+              style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
+            >
+              ✍︎ Manual
             </span>
           )}
         </div>
-        <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
-          ¿Frijolita o Frijolito Rodríguez Terán?
-        </p>
-        <BabyGenderSelector value={babyGender} onChange={setBabyGender} disabled={locked} />
-      </div>
 
-      {/* Individual awards */}
-      <div
-        className='rounded-xl p-4'
-        style={{
-          background: 'var(--color-surface-card)',
-          border: `1px solid ${
-            !locked && (!goldenBoot.trim() || !goldenBall.trim()) ? 'var(--color-accent-red)' : 'var(--color-border)'
-          }`,
-        }}
-      >
-        <div className='flex items-center gap-2 mb-3'>
-          <h3
-            className='text-sm font-semibold'
-            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}
-          >
-            Premios Individuales
-          </h3>
-          {locked && (
-            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-              🔒
-            </span>
-          )}
+        {!locked && (
+          <>
+            {/* Reminder banner */}
+            <div
+              className='rounded-lg p-3 mb-3 text-xs'
+              style={{
+                background: 'rgba(212,168,67,0.08)',
+                border: '1px solid rgba(212,168,67,0.3)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              Estos <strong>no se guardan solos</strong>. Elige el sexo del bebé y los premios, y das click en{' '}
+              <strong style={{ color: 'var(--color-gold)' }}>Guardar</strong> para registrarlos.
+            </div>
+
+            {/* Save button — kept up top so it's always visible */}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className='w-full mb-4 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95'
+              style={{
+                background: saved ? 'var(--color-pitch)' : dirty ? 'var(--color-gold)' : 'var(--color-surface-hover)',
+                color: saved ? 'var(--color-text-primary)' : dirty ? '#111318' : 'var(--color-text-muted)',
+                opacity: saving ? 0.7 : 1,
+                fontFamily: 'var(--font-display)',
+              }}
+            >
+              {saving ? 'Guardando...' : saved ? '✓ Guardado' : dirty ? 'Guardar premios' : 'Todo guardado'}
+            </button>
+          </>
+        )}
+
+        {/* Baby gender */}
+        <div className='mb-4'>
+          <label className='block text-sm font-semibold mb-0.5' style={{ color: 'var(--color-text-primary)' }}>
+            👶🏻 El bebé será...
+          </label>
+          <p className='text-xs mb-2' style={{ color: 'var(--color-text-muted)' }}>
+            ¿Frijolita o Frijolito Rodríguez Terán?
+          </p>
+          <BabyGenderSelector value={babyGender} onChange={setBabyGender} disabled={locked} />
         </div>
+
+        {/* Golden boot / ball */}
         <div className='space-y-3'>
           {[
             { label: '⚽ Bota de Oro', key: 'boot', value: goldenBoot, setter: setGoldenBoot },
@@ -756,7 +796,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
                 placeholder='Nombre del jugador'
                 className='w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-colors'
                 style={{
-                  background: locked ? 'var(--color-surface)' : 'var(--color-surface)',
+                  background: 'var(--color-surface)',
                   border: `1px solid ${locked ? 'var(--color-border)' : 'var(--color-pitch)'}`,
                   color: locked ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
                 }}
@@ -764,21 +804,6 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
             </div>
           ))}
         </div>
-
-        {!locked && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className='w-full mt-4 py-2.5 rounded-xl text-sm font-semibold transition-all'
-            style={{
-              background: saved ? 'var(--color-pitch)' : 'var(--color-gold)',
-              color: saved ? 'var(--color-text-primary)' : '#111318',
-              opacity: saving ? 0.7 : 1,
-            }}
-          >
-            {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar Premios'}
-          </button>
-        )}
       </div>
     </div>
   );
