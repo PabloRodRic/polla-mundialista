@@ -8,6 +8,7 @@ import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
 import PredictionIcon from '../assets/prediction.svg?react';
 import logo from '../assets/logo-2.png';
+import { APP_VERSION } from '../version';
 
 const NAV_TABS = [
   { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
@@ -168,6 +169,10 @@ export default function Layout() {
                   >
                     Cerrar sesión
                   </button>
+                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                  <div className='px-4 py-2 text-[11px]' style={{ color: 'var(--color-text-muted)' }}>
+                    v{APP_VERSION}
+                  </div>
                 </div>
               </>
             )}

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import trionda from '../assets/trionda.png';
 import logo from '../assets/logo-no-bg.png';
 import InstallInstructions from '../components/InstallInstructions';
+import { APP_VERSION } from '../version';
 
 const FLAGS = [
   { code: 'ar', top: '8%', left: '5%', delay: '0s' },
@@ -200,6 +201,10 @@ export default function LoginPage() {
         className='w-10 h-10 mt-4 object-contain'
         style={{ animation: 'spinSlow 12s linear infinite' }}
       />
+      {/* Version */}
+      <p className='relative z-10 mt-3 text-[10px]' style={{ color: 'var(--color-text-muted)', opacity: 0.5 }}>
+        v{APP_VERSION}
+      </p>
       <style>{`
         @keyframes floatFlag {
           0%, 100% { transform: translateY(0px) rotate(-3deg); }

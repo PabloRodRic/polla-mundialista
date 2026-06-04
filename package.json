@@ -1,13 +1,14 @@
 {
   "name": "polla-mundialista",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.1.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Auto-bump the app patch version on every commit, then re-stage the file
+# so the bump is part of the commit.
+node scripts/bump-version.mjs || exit 1
+git add src/version.js
