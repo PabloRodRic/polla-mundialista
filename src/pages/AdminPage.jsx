@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, getDocs, where, deleteField, Timestamp } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  doc,
+  getDoc,
+  updateDoc,
+  getDocs,
+  where,
+  deleteField,
+  Timestamp,
+} from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -163,11 +175,18 @@ function MatchOverrideCard({ match, onSave }) {
       <div className='flex items-start justify-between mb-3 gap-2'>
         <div>
           <div className='flex items-center gap-2'>
-            <p className='text-sm font-semibold flex items-center gap-1.5' style={{ color: 'var(--color-text-primary)' }}>
-              {match.flagA && <img src={`https://flagcdn.com/w40/${match.flagA}.png`} className='w-5 h-3.5 object-cover rounded' />}
+            <p
+              className='text-sm font-semibold flex items-center gap-1.5'
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              {match.flagA && (
+                <img src={`https://flagcdn.com/w40/${match.flagA}.png`} className='w-5 h-3.5 object-cover rounded' />
+              )}
               {match.tlaA || match.teamA}
               <span style={{ color: 'var(--color-text-muted)' }}>vs</span>
-              {match.flagB && <img src={`https://flagcdn.com/w40/${match.flagB}.png`} className='w-5 h-3.5 object-cover rounded' />}
+              {match.flagB && (
+                <img src={`https://flagcdn.com/w40/${match.flagB}.png`} className='w-5 h-3.5 object-cover rounded' />
+              )}
               {match.tlaB || match.teamB}
             </p>
             {match.adminOverride && (
@@ -335,12 +354,12 @@ function AwardsCard({ onSave }) {
       <div className='space-y-3 mb-4'>
         <div>
           <label className='block text-xs mb-2' style={{ color: 'var(--color-text-secondary)' }}>
-            👶 El bebé es (Rodríguez Terán)
+            👶🏻 El bebé es (Rodríguez Terán)
           </label>
           <div className='grid grid-cols-2 gap-2'>
             {[
-              { value: 'girl', label: '👧 Niña', color: '#e84393' },
-              { value: 'boy', label: '👦 Niño', color: 'var(--color-accent-blue)' },
+              { value: 'girl', label: '👧🏻 Niña', color: '#e84393' },
+              { value: 'boy', label: '👦🏻 Niño', color: 'var(--color-accent-blue)' },
             ].map(({ value, label, color }) => {
               const active = babyGender === value;
               return (
@@ -369,7 +388,7 @@ function AwardsCard({ onSave }) {
             type='text'
             placeholder='Ej: Lionel Messi'
             value={goldenBoot}
-            onChange={e => setGoldenBoot(e.target.value)}
+            onChange={(e) => setGoldenBoot(e.target.value)}
             className='w-full px-3 py-2 rounded-lg text-sm border-0 outline-none'
             style={{
               background: 'var(--color-surface)',
@@ -386,7 +405,7 @@ function AwardsCard({ onSave }) {
             type='text'
             placeholder='Ej: Kylian Mbappé'
             value={goldenBall}
-            onChange={e => setGoldenBall(e.target.value)}
+            onChange={(e) => setGoldenBall(e.target.value)}
             className='w-full px-3 py-2 rounded-lg text-sm border-0 outline-none'
             style={{
               background: 'var(--color-surface)',
@@ -686,7 +705,9 @@ export default function AdminPage() {
           <p>Sin partidos con este filtro.</p>
         </div>
       ) : (
-        filtered.map((m) => <MatchOverrideCard key={m.id} match={m} onSave={(msg) => showToast(msg || 'Resultado guardado')} />)
+        filtered.map((m) => (
+          <MatchOverrideCard key={m.id} match={m} onSave={(msg) => showToast(msg || 'Resultado guardado')} />
+        ))
       )}
     </div>
   );

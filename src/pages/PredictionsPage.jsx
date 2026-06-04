@@ -37,6 +37,17 @@ function formatDate(timestamp) {
   }).format(timestamp.toDate());
 }
 
+function formatFullDate(date) {
+  if (!date) return '';
+  return new Intl.DateTimeFormat('es', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function ScoreInput({ value, onChange, disabled }) {
   return (
     <input
@@ -240,17 +251,25 @@ export default function PredictionsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [filter, setFilter] = useState('upcoming');
+  const [tournamentStart, setTournamentStart] = useState(null);
   const debounceRef = useRef({});
 
   useEffect(() => {
     const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
     const unsub = onSnapshot(q, (snap) => {
       const data = [];
+      let firstGroup = null;
       snap.forEach((d) => {
         const m = { id: d.id, ...d.data() };
+        // Tournament start = kickoff of the earliest group-stage match
+        if (m.stage === 'group') {
+          const dt = m.date?.toDate?.();
+          if (dt && (!firstGroup || dt < firstGroup)) firstGroup = dt;
+        }
         if (KNOCKOUT_STAGES.includes(m.stage)) data.push(m);
       });
       setMatches(data);
+      setTournamentStart(firstGroup);
       setLoading(false);
     });
     return unsub;
@@ -325,16 +344,20 @@ export default function PredictionsPage() {
 
   const pendingCount = availableMatches.filter((m) => !predictions[m.id]).length;
 
+  // The whole tab stays locked until the World Cup kicks off (first group match).
+  // Before that, every prediction belongs in the Pronóstico tab.
+  const tournamentStarted = tournamentStart ? new Date() >= tournamentStart : false;
+
   return (
     <div className='max-w-lg mx-auto px-4 pt-4 pb-6'>
-      <div className='flex items-baseline justify-between mb-4'>
+      <div className='flex items-baseline justify-between mb-1'>
         <h1
           className='text-xl font-bold'
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
         >
           Predicciones
         </h1>
-        {pendingCount > 0 && (
+        {tournamentStarted && pendingCount > 0 && (
           <span
             className='text-xs px-2 py-1 rounded-full font-semibold'
             style={{ background: 'var(--color-accent-red)', color: '#fff' }}
@@ -344,55 +367,93 @@ export default function PredictionsPage() {
         )}
       </div>
 
-      {/* Filter tabs */}
-      <div className='flex gap-2 mb-4'>
-        {[
-          { value: 'upcoming', label: 'Próximos' },
-          { value: 'finished', label: 'Finalizados' },
-          { value: 'all', label: 'Todos' },
-        ].map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className='flex-1 py-1.5 rounded-full text-xs font-medium transition-colors'
-            style={{
-              background: filter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
-              color: filter === f.value ? '#111318' : 'var(--color-text-secondary)',
-              border: filter === f.value ? 'none' : '1px solid var(--color-border)',
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
       {loading ? (
-        Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-      ) : filtered.length === 0 ? (
-        <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
-          <p className='text-4xl mb-3'>
-            {filter === 'upcoming' ? '📅' : filter === 'finished' ? '✅' : '📝'}
+        <div className='mt-3'>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : !tournamentStarted ? (
+        /* Locked until the tournament starts */
+        <div
+          className='mt-4 rounded-xl p-6 text-center'
+          style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+        >
+          <p className='text-4xl mb-3'>🔒</p>
+          <h2
+            className='text-base font-bold mb-2'
+            style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
+          >
+            Disponible cuando arranque el Mundial
+          </h2>
+          <p className='text-sm leading-relaxed mb-3' style={{ color: 'var(--color-text-secondary)' }}>
+            Acá vas a marcar el resultado de cada partido de eliminatoria en vivo, hasta una hora antes de que empiece.
           </p>
-          <p>
-            {filter === 'upcoming'
-              ? 'No hay partidos próximos pendientes.'
-              : filter === 'finished'
-                ? 'Aún no hay partidos finalizados.'
-                : 'No hay partidos de fase eliminatoria.'}
+          <p className='text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
+            Por ahora, completá <strong>todos</strong> tus pronósticos de grupos, llaves y premios en el tab de{' '}
+            <strong style={{ color: 'var(--color-gold)' }}>Pronóstico</strong>.
           </p>
+          {tournamentStart && (
+            <p className='text-xs mt-4' style={{ color: 'var(--color-text-muted)' }}>
+              Se habilita el {formatFullDate(tournamentStart)}
+            </p>
+          )}
         </div>
       ) : (
-        filtered.map((m) => (
-          <PredictionCard
-            key={m.id}
-            match={m}
-            prediction={predictions[m.id] ?? null}
-            onSave={savePrediction}
-            saving={saving[m.id] ?? false}
-          />
-        ))
-      )}
+        <>
+          {/* Instruction */}
+          <p className='text-sm mt-1 mb-4' style={{ color: 'var(--color-text-muted)' }}>
+            Marcá tus pronósticos en cada partido hasta una hora antes del inicio del mismo.
+          </p>
 
+          {/* Filter tabs */}
+          <div className='flex gap-2 mb-4'>
+            {[
+              { value: 'upcoming', label: 'Próximos' },
+              { value: 'finished', label: 'Finalizados' },
+              { value: 'all', label: 'Todos' },
+            ].map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setFilter(f.value)}
+                className='flex-1 py-1.5 rounded-full text-xs font-medium transition-colors'
+                style={{
+                  background: filter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
+                  color: filter === f.value ? '#111318' : 'var(--color-text-secondary)',
+                  border: filter === f.value ? 'none' : '1px solid var(--color-border)',
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
+              <p className='text-4xl mb-3'>
+                {filter === 'upcoming' ? '📅' : filter === 'finished' ? '✅' : '📝'}
+              </p>
+              <p>
+                {filter === 'upcoming'
+                  ? 'No hay partidos próximos pendientes.'
+                  : filter === 'finished'
+                    ? 'Aún no hay partidos finalizados.'
+                    : 'No hay partidos de fase eliminatoria.'}
+              </p>
+            </div>
+          ) : (
+            filtered.map((m) => (
+              <PredictionCard
+                key={m.id}
+                match={m}
+                prediction={predictions[m.id] ?? null}
+                onSave={savePrediction}
+                saving={saving[m.id] ?? false}
+              />
+            ))
+          )}
+        </>
+      )}
     </div>
   );
 }

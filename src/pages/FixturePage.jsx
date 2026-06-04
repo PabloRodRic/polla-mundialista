@@ -684,7 +684,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
             className='text-sm font-semibold'
             style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
           >
-            👶 El bebé será...
+            👶🏻 El bebé será...
           </h3>
           {locked && (
             <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>

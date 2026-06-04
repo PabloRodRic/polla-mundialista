@@ -98,10 +98,18 @@ export default function RulesPage() {
         </p>
         <div
           className='rounded-lg p-3 mb-4 text-xs'
-          style={{ background: 'rgba(212,168,67,0.08)', border: '1px solid rgba(212,168,67,0.2)', color: 'var(--color-text-secondary)' }}
+          style={{
+            background: 'rgba(212,168,67,0.08)',
+            border: '1px solid rgba(212,168,67,0.2)',
+            color: 'var(--color-text-secondary)',
+          }}
         >
-          <p className='font-semibold mb-1' style={{ color: 'var(--color-gold)' }}>Regla de eliminatorias</p>
-          <p>Los goles cuentan incluyendo el tiempo extra. Los penales <strong>no cuentan</strong>.</p>
+          <p className='font-semibold mb-1' style={{ color: 'var(--color-gold)' }}>
+            Regla de eliminatorias
+          </p>
+          <p>
+            Los goles cuentan incluyendo el tiempo extra. Los penales <strong>no cuentan</strong>.
+          </p>
           <p className='mt-1'>Si predices un empate (ej. 2-2), deberás indicar qué equipo avanza en penales.</p>
         </div>
         {[
@@ -149,7 +157,7 @@ export default function RulesPage() {
       <Section title='Premios Individuales'>
         <PointRow label='Bota de Oro (goleador)' points={individualAwards.goldenBoot} />
         <PointRow label='Balón de Oro (mejor jugador)' points={individualAwards.goldenBall} />
-        <PointRow label='👶 El bebé será niño/niña' points={individualAwards.babyGender} />
+        <PointRow label='👶🏻 El bebé será niño/niña' points={individualAwards.babyGender} />
       </Section>
 
       {/* Lock rule */}
@@ -159,8 +167,8 @@ export default function RulesPage() {
           primer partido del torneo.
         </p>
         <p className='text-sm mt-2' style={{ color: 'var(--color-text-secondary)' }}>
-          Las predicciones en vivo de eliminatorias se habilitan cuando los dos equipos del partido están definidos y
-          se cierran <strong>{liveMatchTiming.locksBeforeKickoffHours} hora</strong> antes del inicio del partido.
+          Las predicciones en vivo de eliminatorias se habilitan cuando los dos equipos del partido están definidos y se
+          cierran <strong>{liveMatchTiming.locksBeforeKickoffHours} hora</strong> antes del inicio del partido.
         </p>
       </Section>
     </div>
