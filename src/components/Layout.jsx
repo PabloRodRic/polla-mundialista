@@ -28,10 +28,12 @@ export default function Layout() {
 
   // Pull-to-refresh (mainly for the installed PWA, which has no reload button)
   const mainRef = useRef(null);
-  const pullState = useRef({ startY: null, pulling: false });
+  // mode: 'scroll' = let native scroll, 'idle' = eligible to become a pull, 'pull' = pulling
+  const pullState = useRef({ startY: null, mode: 'scroll' });
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const PULL_THRESHOLD = 70;
+  const PULL_THRESHOLD = 80;
+  const PULL_DEADZONE = 10;
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -44,37 +46,47 @@ export default function Layout() {
     const st = pullState.current;
 
     const onStart = (e) => {
-      if (el.scrollTop <= 0 && !refreshing) {
-        st.startY = e.touches[0].clientY;
-        st.pulling = false;
-      } else {
-        st.startY = null;
-      }
+      st.startY = e.touches[0].clientY;
+      // Only a gesture that BEGINS at the very top is eligible to become a pull.
+      // Anything else (incl. scrolls that later reach the top) stays a scroll.
+      st.mode = el.scrollTop <= 0 && !refreshing ? 'idle' : 'scroll';
     };
     const onMove = (e) => {
-      if (st.startY === null || refreshing) return;
+      if (refreshing || st.mode === 'scroll') return;
       const dy = e.touches[0].clientY - st.startY;
-      if (dy > 0 && el.scrollTop <= 0) {
-        st.pulling = true;
-        setPull(Math.min(dy * 0.5, 90)); // damped, capped
-        if (e.cancelable) e.preventDefault(); // take over from native scroll
-      } else if (st.pulling) {
-        st.pulling = false;
-        setPull(0);
+
+      // Decide intent once, after a deliberate first movement.
+      if (st.mode === 'idle') {
+        if (Math.abs(dy) < PULL_DEADZONE) return; // ignore tiny jitter
+        if (dy > 0 && el.scrollTop <= 0) st.mode = 'pull';
+        else {
+          st.mode = 'scroll'; // first move was upward/scroll → never pull this gesture
+          return;
+        }
       }
+
+      // Locked into pull mode.
+      if (el.scrollTop > 0) {
+        st.mode = 'scroll';
+        setPull(0);
+        return;
+      }
+      setPull(Math.min((dy - PULL_DEADZONE) * 0.5, 90)); // damped, capped
+      if (e.cancelable) e.preventDefault(); // take over from native scroll
     };
     const onEnd = () => {
-      if (st.startY === null) return;
-      setPull((p) => {
-        if (p >= PULL_THRESHOLD) {
-          setRefreshing(true);
-          setTimeout(() => window.location.reload(), 400);
-          return PULL_THRESHOLD;
-        }
-        return 0;
-      });
+      if (st.mode === 'pull') {
+        setPull((p) => {
+          if (p >= PULL_THRESHOLD) {
+            setRefreshing(true);
+            setTimeout(() => window.location.reload(), 400);
+            return PULL_THRESHOLD;
+          }
+          return 0;
+        });
+      }
       st.startY = null;
-      st.pulling = false;
+      st.mode = 'scroll';
     };
 
     el.addEventListener('touchstart', onStart, { passive: true });
