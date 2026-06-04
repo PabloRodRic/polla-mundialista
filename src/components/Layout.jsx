@@ -26,80 +26,10 @@ export default function Layout() {
   const nameInputRef = useRef(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
-  // Pull-to-refresh (mainly for the installed PWA, which has no reload button)
-  const mainRef = useRef(null);
-  // mode: 'scroll' = let native scroll, 'idle' = eligible to become a pull, 'pull' = pulling
-  const pullState = useRef({ startY: null, mode: 'scroll' });
-  const [pull, setPull] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const PULL_THRESHOLD = 80;
-  const PULL_DEADZONE = 10;
-
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
-
-  useEffect(() => {
-    const el = mainRef.current;
-    if (!el) return;
-    const st = pullState.current;
-
-    const onStart = (e) => {
-      st.startY = e.touches[0].clientY;
-      // Only a gesture that BEGINS at the very top is eligible to become a pull.
-      // Anything else (incl. scrolls that later reach the top) stays a scroll.
-      st.mode = el.scrollTop <= 0 && !refreshing ? 'idle' : 'scroll';
-    };
-    const onMove = (e) => {
-      if (refreshing || st.mode === 'scroll') return;
-      const dy = e.touches[0].clientY - st.startY;
-
-      // Decide intent once, after a deliberate first movement.
-      if (st.mode === 'idle') {
-        if (Math.abs(dy) < PULL_DEADZONE) return; // ignore tiny jitter
-        if (dy > 0 && el.scrollTop <= 0) st.mode = 'pull';
-        else {
-          st.mode = 'scroll'; // first move was upward/scroll → never pull this gesture
-          return;
-        }
-      }
-
-      // Locked into pull mode.
-      if (el.scrollTop > 0) {
-        st.mode = 'scroll';
-        setPull(0);
-        return;
-      }
-      setPull(Math.min((dy - PULL_DEADZONE) * 0.5, 90)); // damped, capped
-      if (e.cancelable) e.preventDefault(); // take over from native scroll
-    };
-    const onEnd = () => {
-      if (st.mode === 'pull') {
-        setPull((p) => {
-          if (p >= PULL_THRESHOLD) {
-            setRefreshing(true);
-            setTimeout(() => window.location.reload(), 400);
-            return PULL_THRESHOLD;
-          }
-          return 0;
-        });
-      }
-      st.startY = null;
-      st.mode = 'scroll';
-    };
-
-    el.addEventListener('touchstart', onStart, { passive: true });
-    el.addEventListener('touchmove', onMove, { passive: false });
-    el.addEventListener('touchend', onEnd, { passive: true });
-    el.addEventListener('touchcancel', onEnd, { passive: true });
-    return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
-      el.removeEventListener('touchcancel', onEnd);
-    };
-  }, [refreshing]);
 
   function toggleTheme() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
@@ -225,6 +155,27 @@ export default function Layout() {
                   </div>
                   <div style={{ borderTop: '1px solid var(--color-border)' }} />
                   <button
+                    onClick={() => window.location.reload()}
+                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover flex items-center gap-2'
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <svg
+                      width='14'
+                      height='14'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                    >
+                      <path d='M21 12a9 9 0 1 1-2.64-6.36' />
+                      <path d='M21 3v6h-6' />
+                    </svg>
+                    Actualizar
+                  </button>
+                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                  <button
                     onClick={openEditName}
                     className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
                     style={{ color: 'var(--color-text-muted)' }}
@@ -252,50 +203,10 @@ export default function Layout() {
 
       {/* Page content */}
       <main
-        ref={mainRef}
-        className='flex-1 overflow-y-auto relative'
+        className='flex-1 overflow-y-auto'
         style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) * 0.5)' }}
       >
-        {/* Pull-to-refresh indicator */}
-        <div
-          className='absolute left-0 right-0 flex justify-center pointer-events-none z-10'
-          style={{
-            top: 0,
-            transform: `translateY(${pull - 40}px)`,
-            opacity: Math.min(pull / PULL_THRESHOLD, 1),
-            transition: pull === 0 ? 'transform 0.2s, opacity 0.2s' : 'none',
-          }}
-        >
-          <div
-            className='mt-2 w-9 h-9 rounded-full flex items-center justify-center shadow'
-            style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-          >
-            <svg
-              className={refreshing ? 'animate-spin' : ''}
-              style={{ transform: refreshing ? 'none' : `rotate(${pull * 3}deg)` }}
-              width='18'
-              height='18'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='var(--color-gold)'
-              strokeWidth='2.5'
-              strokeLinecap='round'
-              strokeLinejoin='round'
-            >
-              <path d='M21 12a9 9 0 1 1-2.64-6.36' />
-              <path d='M21 3v6h-6' />
-            </svg>
-          </div>
-        </div>
-
-        <div
-          style={{
-            transform: `translateY(${pull}px)`,
-            transition: pull === 0 ? 'transform 0.2s' : 'none',
-          }}
-        >
-          <Outlet />
-        </div>
+        <Outlet />
       </main>
 
       {/* Edit name modal */}
