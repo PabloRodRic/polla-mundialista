@@ -71,6 +71,7 @@ export default function Layout() {
         style={{
           background: 'var(--color-surface-glass)',
           borderBottom: '1px solid var(--color-border)',
+          paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)',
         }}
       >
         <div className='flex items-center gap-1'>
@@ -175,7 +176,7 @@ export default function Layout() {
       </header>
 
       {/* Page content */}
-      <main className='flex-1 overflow-y-auto' style={{ paddingBottom: '72px' }}>
+      <main className='flex-1 overflow-y-auto' style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
@@ -234,7 +235,8 @@ export default function Layout() {
         style={{
           background: 'var(--color-surface-glass)',
           borderTop: '1px solid var(--color-border)',
-          height: '64px',
+          height: 'calc(64px + env(safe-area-inset-bottom))',
+          paddingBottom: 'env(safe-area-inset-bottom)',
           backdropFilter: 'blur(12px)',
         }}
       >
