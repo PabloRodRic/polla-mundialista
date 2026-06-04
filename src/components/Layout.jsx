@@ -24,12 +24,23 @@ export default function Layout() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const nameInputRef = useRef(null);
+  const menuRef = useRef(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  // Close the profile menu when clicking/tapping anywhere outside it
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [menuOpen]);
 
   function toggleTheme() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
@@ -124,7 +135,7 @@ export default function Layout() {
             )}
           </button>
 
-          <div className='relative'>
+          <div className='relative' ref={menuRef}>
             <button onClick={() => setMenuOpen((o) => !o)} className='flex items-center gap-2'>
               {user?.photoURL ? (
                 <img
@@ -144,24 +155,74 @@ export default function Layout() {
             </button>
 
             {menuOpen && (
-              <>
-                <div className='fixed inset-0 z-10' onClick={() => setMenuOpen(false)} />
-                <div
-                  className='absolute right-0 top-10 z-20 rounded-xl shadow-xl w-44 py-1 text-sm'
-                  style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-                >
-                  <div className='px-4 py-2 text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
-                    {profile?.name}
+              <div
+                className='absolute right-0 top-11 z-30 w-64 rounded-2xl overflow-hidden text-sm'
+                style={{
+                  background: 'var(--color-surface-card)',
+                  border: '1px solid var(--color-border)',
+                  boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+                }}
+              >
+                {/* Profile header */}
+                <div className='flex items-center gap-3 px-4 py-3'>
+                  {user?.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={profile?.name}
+                      className='w-10 h-10 rounded-full object-cover shrink-0'
+                      style={{ border: '2px solid var(--color-border)' }}
+                    />
+                  ) : (
+                    <div
+                      className='w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0'
+                      style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
+                    >
+                      {profile?.name?.[0] || '?'}
+                    </div>
+                  )}
+                  <div className='min-w-0'>
+                    <p
+                      className='font-semibold truncate'
+                      style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
+                    >
+                      {profile?.name || 'Jugador'}
+                    </p>
+                    {user?.email && (
+                      <p className='text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
+                        {user.email}
+                      </p>
+                    )}
                   </div>
-                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                </div>
+
+                {/* Actions */}
+                <div className='py-1' style={{ borderTop: '1px solid var(--color-border)' }}>
                   <button
-                    onClick={() => window.location.reload()}
-                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover flex items-center gap-2'
-                    style={{ color: 'var(--color-text-muted)' }}
+                    onClick={openEditName}
+                    className='w-full flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover'
+                    style={{ color: 'var(--color-text-secondary)' }}
                   >
                     <svg
-                      width='14'
-                      height='14'
+                      className='w-4 h-4 shrink-0'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                    >
+                      <path d='M12 20h9' />
+                      <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' />
+                    </svg>
+                    Cambiar nombre
+                  </button>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className='w-full flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover'
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    <svg
+                      className='w-4 h-4 shrink-0'
                       viewBox='0 0 24 24'
                       fill='none'
                       stroke='currentColor'
@@ -172,30 +233,50 @@ export default function Layout() {
                       <path d='M21 12a9 9 0 1 1-2.64-6.36' />
                       <path d='M21 3v6h-6' />
                     </svg>
-                    Actualizar
+                    Actualizar app
                   </button>
-                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
-                  <button
-                    onClick={openEditName}
-                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
-                    style={{ color: 'var(--color-text-muted)' }}
-                  >
-                    Cambiar nombre
-                  </button>
-                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                </div>
+
+                {/* Sign out */}
+                <div className='py-1' style={{ borderTop: '1px solid var(--color-border)' }}>
                   <button
                     onClick={handleLogout}
-                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
+                    className='w-full flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover'
                     style={{ color: 'var(--color-accent-red)' }}
                   >
+                    <svg
+                      className='w-4 h-4 shrink-0'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                    >
+                      <path d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' />
+                      <path d='M16 17l5-5-5-5' />
+                      <path d='M21 12H9' />
+                    </svg>
                     Cerrar sesión
                   </button>
-                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
-                  <div className='px-4 py-2 text-[11px]' style={{ color: 'var(--color-text-muted)' }}>
-                    v{APP_VERSION}
-                  </div>
                 </div>
-              </>
+
+                {/* Footer */}
+                <div
+                  className='flex items-center justify-between px-4 py-2'
+                  style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
+                >
+                  <span
+                    className='text-[10px] uppercase tracking-widest'
+                    style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-display)' }}
+                  >
+                    RodGames
+                  </span>
+                  <span className='text-[10px]' style={{ color: 'var(--color-text-muted)' }}>
+                    v{APP_VERSION}
+                  </span>
+                </div>
+              </div>
             )}
           </div>
         </div>
