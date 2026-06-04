@@ -130,7 +130,15 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
       className='rounded-xl p-3 mb-2'
       style={{
         background: 'var(--color-surface-card)',
-        border: `1px solid ${isCancelled ? 'var(--color-border)' : hasResult ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+        border: `1px solid ${
+          isCancelled
+            ? 'var(--color-border)'
+            : hasResult
+              ? 'var(--color-pitch)'
+              : !locked
+                ? 'var(--color-accent-red)'
+                : 'var(--color-border)'
+        }`,
         opacity: isCancelled ? 0.5 : 1,
       }}
     >
@@ -462,7 +470,13 @@ function KnockoutMatchCard({
       className='rounded-xl p-3 mb-3'
       style={{
         background: 'var(--color-surface-card)',
-        border: `1px solid ${effectiveWinner ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+        border: `1px solid ${
+          effectiveWinner
+            ? 'var(--color-pitch)'
+            : bothKnown && !locked
+              ? 'var(--color-accent-red)'
+              : 'var(--color-border)'
+        }`,
       }}
     >
       {/* Date + saving */}
@@ -676,7 +690,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         className='rounded-xl p-4'
         style={{
           background: 'var(--color-surface-card)',
-          border: '1px solid var(--color-border)',
+          border: `1px solid ${!locked && !babyGender ? 'var(--color-accent-red)' : 'var(--color-border)'}`,
         }}
       >
         <div className='flex items-center gap-2 mb-1'>
@@ -701,7 +715,14 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
       {/* Individual awards */}
       <div
         className='rounded-xl p-4'
-        style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+        style={{
+          background: 'var(--color-surface-card)',
+          border: `1px solid ${
+            !locked && (!goldenBoot.trim() || !goldenBall.trim())
+              ? 'var(--color-accent-red)'
+              : 'var(--color-border)'
+          }`,
+        }}
       >
         <div className='flex items-center gap-2 mb-3'>
           <h3
@@ -998,6 +1019,35 @@ export default function TournamentPage() {
     { key: 'premios', label: 'Premios' },
   ];
 
+  // ─── Completeness (red "falta llenar" indicators, only while still editable) ──
+  const showFalta = !tournamentLocked;
+
+  const groupIncomplete = {};
+  for (const g of GROUPS) {
+    const ms = groupMatches.filter((m) => m.group === g);
+    groupIncomplete[g] =
+      ms.length === 0 ||
+      ms.some((m) => {
+        const p = groupPredictions[m.id];
+        return !p || p.predictedScoreA == null || p.predictedScoreB == null;
+      });
+  }
+
+  const roundIncomplete = {
+    roundOf32: !isRoundComplete(BRACKET_R32, effectivePicks),
+    roundOf16: !isRoundComplete(BRACKET_R16, effectivePicks),
+    quarterfinals: !isRoundComplete(BRACKET_QF, effectivePicks),
+    semifinals: !isRoundComplete(BRACKET_SF, effectivePicks),
+    thirdPlace: !effectivePicks['3rd'],
+    final: !effectivePicks['final'],
+  };
+
+  const sectionIncomplete = {
+    grupos: GROUPS.some((g) => groupIncomplete[g]),
+    eliminatorias: Object.values(roundIncomplete).some(Boolean),
+    premios: !bracketData?.babyGender || !bracketData?.goldenBoot || !bracketData?.goldenBall,
+  };
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -1049,7 +1099,12 @@ export default function TournamentPage() {
             style={{
               background: section === s.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
               color: section === s.key ? '#111318' : 'var(--color-text-secondary)',
-              border: section === s.key ? 'none' : '1px solid var(--color-border)',
+              border:
+                showFalta && sectionIncomplete[s.key]
+                  ? '1.5px solid var(--color-accent-red)'
+                  : section === s.key
+                    ? 'none'
+                    : '1px solid var(--color-border)',
             }}
           >
             {s.label}
@@ -1070,7 +1125,12 @@ export default function TournamentPage() {
                 style={{
                   background: selectedGroup === g ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: selectedGroup === g ? '#111318' : 'var(--color-text-secondary)',
-                  border: selectedGroup === g ? 'none' : '1px solid var(--color-border)',
+                  border:
+                    showFalta && groupIncomplete[g]
+                      ? '1.5px solid var(--color-accent-red)'
+                      : selectedGroup === g
+                        ? 'none'
+                        : '1px solid var(--color-border)',
                   fontFamily: 'var(--font-display)',
                 }}
               >
@@ -1165,7 +1225,12 @@ export default function TournamentPage() {
                 style={{
                   background: knockoutRound === r.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: knockoutRound === r.key ? '#111318' : 'var(--color-text-secondary)',
-                  border: knockoutRound === r.key ? 'none' : '1px solid var(--color-border)',
+                  border:
+                    showFalta && roundIncomplete[r.key]
+                      ? '1.5px solid var(--color-accent-red)'
+                      : knockoutRound === r.key
+                        ? 'none'
+                        : '1px solid var(--color-border)',
                 }}
               >
                 {r.label}
