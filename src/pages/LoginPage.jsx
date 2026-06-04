@@ -86,7 +86,7 @@ export default function LoginPage() {
         />
       ))}
       {/* Logo */}
-      <img src={logo} alt='Logo' className='w-50 h-50 sm:w-60 sm:h-60 object-contain' />
+      <img src={logo} alt='Logo' className=' z-10 w-50 h-50 sm:w-60 sm:h-60 object-contain' />
       {/* Main card */}
       <div className='relative z-10 w-full max-w-sm flex flex-col items-center gap-6'>
         {/* Titles */}
