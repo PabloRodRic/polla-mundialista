@@ -68,11 +68,11 @@ export default function Layout() {
     <div className='min-h-dvh flex flex-col' style={{ background: 'var(--color-surface)' }}>
       {/* Top bar */}
       <header
-        className='flex items-center justify-between px-4 py-3 sticky top-0 z-10 backdrop-blur-sm'
+        className='flex items-center justify-between px-4 py-2 sticky top-0 z-10 backdrop-blur-sm'
         style={{
           background: 'var(--color-surface-glass)',
           borderBottom: '1px solid var(--color-border)',
-          paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)',
+          paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)',
         }}
       >
         <div className='flex items-center gap-1'>
@@ -181,7 +181,10 @@ export default function Layout() {
       </header>
 
       {/* Page content */}
-      <main className='flex-1 overflow-y-auto' style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom))' }}>
+      <main
+        className='flex-1 overflow-y-auto'
+        style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) * 0.5)' }}
+      >
         <Outlet />
       </main>
 
@@ -240,8 +243,8 @@ export default function Layout() {
         style={{
           background: 'var(--color-surface-glass)',
           borderTop: '1px solid var(--color-border)',
-          height: 'calc(64px + env(safe-area-inset-bottom))',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          height: 'calc(64px + env(safe-area-inset-bottom) * 0.5)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom) * 0.5)',
           backdropFilter: 'blur(12px)',
         }}
       >
