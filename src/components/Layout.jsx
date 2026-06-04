@@ -26,10 +26,68 @@ export default function Layout() {
   const nameInputRef = useRef(null);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
 
+  // Pull-to-refresh (mainly for the installed PWA, which has no reload button)
+  const mainRef = useRef(null);
+  const pullState = useRef({ startY: null, pulling: false });
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const PULL_THRESHOLD = 70;
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const st = pullState.current;
+
+    const onStart = (e) => {
+      if (el.scrollTop <= 0 && !refreshing) {
+        st.startY = e.touches[0].clientY;
+        st.pulling = false;
+      } else {
+        st.startY = null;
+      }
+    };
+    const onMove = (e) => {
+      if (st.startY === null || refreshing) return;
+      const dy = e.touches[0].clientY - st.startY;
+      if (dy > 0 && el.scrollTop <= 0) {
+        st.pulling = true;
+        setPull(Math.min(dy * 0.5, 90)); // damped, capped
+        if (e.cancelable) e.preventDefault(); // take over from native scroll
+      } else if (st.pulling) {
+        st.pulling = false;
+        setPull(0);
+      }
+    };
+    const onEnd = () => {
+      if (st.startY === null) return;
+      setPull((p) => {
+        if (p >= PULL_THRESHOLD) {
+          setRefreshing(true);
+          setTimeout(() => window.location.reload(), 400);
+          return PULL_THRESHOLD;
+        }
+        return 0;
+      });
+      st.startY = null;
+      st.pulling = false;
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, [refreshing]);
 
   function toggleTheme() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
@@ -182,10 +240,50 @@ export default function Layout() {
 
       {/* Page content */}
       <main
-        className='flex-1 overflow-y-auto'
+        ref={mainRef}
+        className='flex-1 overflow-y-auto relative'
         style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) * 0.5)' }}
       >
-        <Outlet />
+        {/* Pull-to-refresh indicator */}
+        <div
+          className='absolute left-0 right-0 flex justify-center pointer-events-none z-10'
+          style={{
+            top: 0,
+            transform: `translateY(${pull - 40}px)`,
+            opacity: Math.min(pull / PULL_THRESHOLD, 1),
+            transition: pull === 0 ? 'transform 0.2s, opacity 0.2s' : 'none',
+          }}
+        >
+          <div
+            className='mt-2 w-9 h-9 rounded-full flex items-center justify-center shadow'
+            style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+          >
+            <svg
+              className={refreshing ? 'animate-spin' : ''}
+              style={{ transform: refreshing ? 'none' : `rotate(${pull * 3}deg)` }}
+              width='18'
+              height='18'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='var(--color-gold)'
+              strokeWidth='2.5'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+            >
+              <path d='M21 12a9 9 0 1 1-2.64-6.36' />
+              <path d='M21 3v6h-6' />
+            </svg>
+          </div>
+        </div>
+
+        <div
+          style={{
+            transform: `translateY(${pull}px)`,
+            transition: pull === 0 ? 'transform 0.2s' : 'none',
+          }}
+        >
+          <Outlet />
+        </div>
       </main>
 
       {/* Edit name modal */}
