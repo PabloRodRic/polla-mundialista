@@ -25,13 +25,35 @@ export default function LoginPage() {
   async function handleLogin() {
     setLoading(true);
     setError(null);
+
+    // Safety net: the Google sign-in popup can leave the button stuck loading
+    // if it's dismissed without finishing — in iOS standalone PWAs the popup
+    // promise sometimes never settles. Reset once the app regains focus.
+    let cleanup = () => {};
+    const reset = () => {
+      setLoading(false);
+      cleanup();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reset();
+    };
+    cleanup = () => {
+      window.removeEventListener('focus', reset);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    window.addEventListener('focus', reset);
+    document.addEventListener('visibilitychange', onVisible);
+
     try {
       await loginWithGoogle();
     } catch (err) {
-      setError('No se pudo iniciar sesión. Intentá de nuevo.');
+      // Don't show an error when the user simply closed the popup.
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+        setError('No se pudo iniciar sesión. Intentá de nuevo.');
+      }
       console.error(err);
     } finally {
-      setLoading(false);
+      reset();
     }
   }
 
