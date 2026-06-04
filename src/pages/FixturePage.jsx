@@ -374,11 +374,15 @@ function KnockoutMatchCard({
   const [prevHomeTla, setPrevHomeTla] = useState(home?.tla ?? null);
   const [prevAwayTla, setPrevAwayTla] = useState(away?.tla ?? null);
 
-  // When teams change, reset scores — stale scores from a previous lineup shouldn't persist
-  const teamChanged = home?.tla !== prevHomeTla || away?.tla !== prevAwayTla;
+  // When teams change, reset scores — stale scores from a previous lineup shouldn't persist.
+  // Normalize to null on both sides so an unknown team (undefined) doesn't read as a
+  // perpetual change vs the stored null — that would loop setState during render.
+  const homeTla = home?.tla ?? null;
+  const awayTla = away?.tla ?? null;
+  const teamChanged = homeTla !== prevHomeTla || awayTla !== prevAwayTla;
   if (teamChanged) {
-    setPrevHomeTla(home?.tla ?? null);
-    setPrevAwayTla(away?.tla ?? null);
+    setPrevHomeTla(homeTla);
+    setPrevAwayTla(awayTla);
     setPrevA(propScoreA ?? null);
     setPrevB(propScoreB ?? null);
     setScoreA(null);
