@@ -727,10 +727,10 @@ function normalizePlayerName(name) {
 // Called by admin after FIFA announces the awards.
 // Saves actual winners to config/tournamentResults and scores all users.
 // Comparison is accent-insensitive and case-insensitive.
-export async function calculateAwardPoints(goldenBoot, goldenBall) {
+export async function calculateAwardPoints(goldenBoot, goldenBall, babyGender = '') {
   await setDoc(
     doc(db, 'config', 'tournamentResults'),
-    { goldenBoot, goldenBall, updatedAt: Timestamp.now() },
+    { goldenBoot, goldenBall, babyGender, updatedAt: Timestamp.now() },
     { merge: true }
   )
 
@@ -752,6 +752,9 @@ export async function calculateAwardPoints(goldenBoot, goldenBall) {
     }
     if (normBall && normalizePlayerName(data.goldenBall) === normBall) {
       points += scoring.individualAwards.goldenBall
+    }
+    if (babyGender && data.babyGender === babyGender) {
+      points += scoring.individualAwards.babyGender
     }
 
     batch.update(bracketDoc.ref, { awardPoints: points })

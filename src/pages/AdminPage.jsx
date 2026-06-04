@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDocs, where, deleteField, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, getDoc, updateDoc, getDocs, where, deleteField, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -291,13 +291,27 @@ function MatchOverrideCard({ match, onSave }) {
 function AwardsCard({ onSave }) {
   const [goldenBoot, setGoldenBoot] = useState('');
   const [goldenBall, setGoldenBall] = useState('');
+  const [babyGender, setBabyGender] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Prefill with the current official results so a partial save doesn't wipe the rest
+  useEffect(() => {
+    getDoc(doc(db, 'config', 'tournamentResults')).then((snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      setGoldenBoot(data.goldenBoot || '');
+      setGoldenBall(data.goldenBall || '');
+      setBabyGender(data.babyGender || '');
+    });
+  }, []);
+
+  const nothingSet = !goldenBoot.trim() && !goldenBall.trim() && !babyGender;
+
   async function handleSave() {
-    if (!goldenBoot.trim() && !goldenBall.trim()) return;
+    if (nothingSet) return;
     setSaving(true);
     try {
-      await calculateAwardPoints(goldenBoot.trim(), goldenBall.trim());
+      await calculateAwardPoints(goldenBoot.trim(), goldenBall.trim(), babyGender);
       onSave?.('Premios individuales guardados');
     } catch (err) {
       console.error('Error saving awards:', err);
@@ -319,6 +333,34 @@ function AwardsCard({ onSave }) {
         Ingresar ganadores reales para calcular puntos. Ejecutar una vez que FIFA los anuncie.
       </p>
       <div className='space-y-3 mb-4'>
+        <div>
+          <label className='block text-xs mb-2' style={{ color: 'var(--color-text-secondary)' }}>
+            👶 El bebé es (Rodríguez Terán)
+          </label>
+          <div className='grid grid-cols-2 gap-2'>
+            {[
+              { value: 'girl', label: '👧 Niña', color: '#e84393' },
+              { value: 'boy', label: '👦 Niño', color: 'var(--color-accent-blue)' },
+            ].map(({ value, label, color }) => {
+              const active = babyGender === value;
+              return (
+                <button
+                  key={value}
+                  type='button'
+                  onClick={() => setBabyGender(active ? '' : value)}
+                  className='py-2.5 rounded-lg text-sm font-semibold transition-all'
+                  style={{
+                    background: active ? color : 'var(--color-surface)',
+                    border: `1px solid ${active ? color : 'var(--color-border)'}`,
+                    color: active ? '#fff' : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div>
           <label className='block text-xs mb-1' style={{ color: 'var(--color-text-secondary)' }}>
             Bota de Oro (nombre del jugador)
@@ -356,12 +398,12 @@ function AwardsCard({ onSave }) {
       </div>
       <button
         onClick={handleSave}
-        disabled={saving || (!goldenBoot.trim() && !goldenBall.trim())}
+        disabled={saving || nothingSet}
         className='w-full py-2 rounded-lg text-sm font-semibold transition-opacity'
         style={{
           background: 'var(--color-gold)',
           color: '#111318',
-          opacity: saving || (!goldenBoot.trim() && !goldenBall.trim()) ? 0.5 : 1,
+          opacity: saving || nothingSet ? 0.5 : 1,
         }}
       >
         {saving ? 'Guardando...' : 'Guardar y calcular puntos'}

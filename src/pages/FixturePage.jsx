@@ -49,11 +49,11 @@ function formatDate(timestamp) {
 function ScoreInput({ value, onChange, disabled }) {
   const externalText = value === null || value === undefined ? '' : String(value);
   const [text, setText] = useState(externalText);
-  const lastExternal = useRef(value);
+  const [lastExternal, setLastExternal] = useState(value);
 
   // Sync only when parent value changes externally (e.g. Firestore update)
-  if (value !== lastExternal.current) {
-    lastExternal.current = value;
+  if (value !== lastExternal) {
+    setLastExternal(value);
     if (externalText !== text) setText(externalText);
   }
 
@@ -139,10 +139,17 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
         <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
           Jornada {match.matchday} · {formatDate(match.date)}
         </span>
-        {isCancelled
-          ? <span className='text-xs' style={{ color: 'var(--color-accent-red)' }}>Cancelado</span>
-          : saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>
-        }
+        {isCancelled ? (
+          <span className='text-xs' style={{ color: 'var(--color-accent-red)' }}>
+            Cancelado
+          </span>
+        ) : (
+          saving && (
+            <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
+              Guardando...
+            </span>
+          )
+        )}
       </div>
 
       <div className='flex items-center gap-2'>
@@ -163,7 +170,10 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
           )}
           <span
             className='text-xs font-bold'
-            style={{ color: homeWins ? 'var(--color-gold)' : 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
+            style={{
+              color: homeWins ? 'var(--color-gold)' : 'var(--color-text-primary)',
+              fontFamily: 'var(--font-display)',
+            }}
           >
             {match.tlaA}
           </span>
@@ -193,7 +203,10 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
           )}
           <span
             className='text-xs font-bold'
-            style={{ color: awayWins ? 'var(--color-gold)' : 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
+            style={{
+              color: awayWins ? 'var(--color-gold)' : 'var(--color-text-primary)',
+              fontFamily: 'var(--font-display)',
+            }}
           >
             {match.tlaB}
           </span>
@@ -222,7 +235,6 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
           )}
         </div>
       )}
-
     </div>
   );
 }
@@ -349,24 +361,30 @@ function KnockoutMatchCard({
 }) {
   const [scoreA, setScoreA] = useState(propScoreA ?? null);
   const [scoreB, setScoreB] = useState(propScoreB ?? null);
-  const prevARef = useRef(propScoreA);
-  const prevBRef = useRef(propScoreB);
-  const prevHomeTla = useRef(home?.tla ?? null);
-  const prevAwayTla = useRef(away?.tla ?? null);
+  const [prevA, setPrevA] = useState(propScoreA);
+  const [prevB, setPrevB] = useState(propScoreB);
+  const [prevHomeTla, setPrevHomeTla] = useState(home?.tla ?? null);
+  const [prevAwayTla, setPrevAwayTla] = useState(away?.tla ?? null);
 
   // When teams change, reset scores — stale scores from a previous lineup shouldn't persist
-  const teamChanged = home?.tla !== prevHomeTla.current || away?.tla !== prevAwayTla.current;
+  const teamChanged = home?.tla !== prevHomeTla || away?.tla !== prevAwayTla;
   if (teamChanged) {
-    prevHomeTla.current = home?.tla ?? null;
-    prevAwayTla.current = away?.tla ?? null;
-    prevARef.current = propScoreA ?? null;
-    prevBRef.current = propScoreB ?? null;
+    setPrevHomeTla(home?.tla ?? null);
+    setPrevAwayTla(away?.tla ?? null);
+    setPrevA(propScoreA ?? null);
+    setPrevB(propScoreB ?? null);
     setScoreA(null);
     setScoreB(null);
   } else {
     // Sync from Firestore updates (only when teams haven't changed)
-    if (propScoreA !== prevARef.current) { prevARef.current = propScoreA; setScoreA(propScoreA ?? null); }
-    if (propScoreB !== prevBRef.current) { prevBRef.current = propScoreB; setScoreB(propScoreB ?? null); }
+    if (propScoreA !== prevA) {
+      setPrevA(propScoreA);
+      setScoreA(propScoreA ?? null);
+    }
+    if (propScoreB !== prevB) {
+      setPrevB(propScoreB);
+      setScoreB(propScoreB ?? null);
+    }
   }
 
   function handleScoreChange(side, val) {
@@ -382,9 +400,7 @@ function KnockoutMatchCard({
   const isTie = hasScores && sA === sB;
 
   // Compute winner locally for immediate UI feedback — no scores means no winner
-  const localWinner = hasScores
-    ? sA > sB ? home?.tla : sA < sB ? away?.tla : tiebreakerPick
-    : null;
+  const localWinner = hasScores ? (sA > sB ? home?.tla : sA < sB ? away?.tla : tiebreakerPick) : null;
   const homeWins = localWinner === home?.tla;
   const awayWins = localWinner === away?.tla;
 
@@ -455,7 +471,11 @@ function KnockoutMatchCard({
           <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
             {formatDate(matchDate)}
           </span>
-          {saving && <span className='text-xs' style={{ color: 'var(--color-gold)' }}>Guardando...</span>}
+          {saving && (
+            <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
+              Guardando...
+            </span>
+          )}
         </div>
       )}
 
@@ -529,13 +549,54 @@ function KnockoutMatchCard({
   );
 }
 
+// ─── Baby gender selector ──────────────────────────────────────────────────────
+
+const BABY_OPTIONS = [
+  { value: 'girl', label: 'Niña', emoji: '👧', color: '#e84393' },
+  { value: 'boy', label: 'Niño', emoji: '👦', color: 'var(--color-accent-blue)' },
+];
+
+function BabyGenderSelector({ value, onChange, disabled }) {
+  return (
+    <div className='grid grid-cols-2 gap-3'>
+      {BABY_OPTIONS.map(({ value: v, label, emoji, color }) => {
+        const active = value === v;
+        return (
+          <button
+            key={v}
+            type='button'
+            onClick={() => !disabled && onChange(active ? '' : v)}
+            disabled={disabled}
+            className='flex flex-col items-center justify-center gap-1 py-4 rounded-xl transition-all duration-150 active:scale-95'
+            style={{
+              background: active ? color : 'var(--color-surface)',
+              border: `2px solid ${active ? color : 'var(--color-border)'}`,
+              color: active ? '#fff' : 'var(--color-text-secondary)',
+              opacity: disabled && !active ? 0.5 : 1,
+              cursor: disabled ? 'default' : 'pointer',
+              boxShadow: active ? `0 4px 16px ${color}55` : 'none',
+            }}
+          >
+            <span className='text-2xl'>{emoji}</span>
+            <span className='text-sm font-bold' style={{ fontFamily: 'var(--font-display)' }}>
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Awards section ────────────────────────────────────────────────────────────
 
 function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, locked }) {
   const [goldenBoot, setGoldenBoot] = useState(bracketData?.goldenBoot || '');
   const [goldenBall, setGoldenBall] = useState(bracketData?.goldenBall || '');
+  const [babyGender, setBabyGender] = useState(bracketData?.babyGender || '');
   const [prevBoot, setPrevBoot] = useState(bracketData?.goldenBoot);
   const [prevBall, setPrevBall] = useState(bracketData?.goldenBall);
+  const [prevBaby, setPrevBaby] = useState(bracketData?.babyGender);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -548,10 +609,14 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
     setPrevBall(bracketData?.goldenBall);
     setGoldenBall(bracketData?.goldenBall || '');
   }
+  if (bracketData?.babyGender !== prevBaby) {
+    setPrevBaby(bracketData?.babyGender);
+    setBabyGender(bracketData?.babyGender || '');
+  }
 
   async function handleSave() {
     setSaving(true);
-    await onSave(goldenBoot.trim(), goldenBall.trim());
+    await onSave(goldenBoot.trim(), goldenBall.trim(), babyGender);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -606,6 +671,33 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         </div>
       </div>
 
+      {/* Baby gender — special prediction */}
+      <div
+        className='rounded-xl p-4'
+        style={{
+          background: 'var(--color-surface-card)',
+          border: '1px solid var(--color-gold)',
+        }}
+      >
+        <div className='flex items-center gap-2 mb-1'>
+          <h3
+            className='text-sm font-semibold'
+            style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+          >
+            👶 El bebé será...
+          </h3>
+          {locked && (
+            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+              🔒
+            </span>
+          )}
+        </div>
+        <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
+          ¿Frijolita o Frijolito Rodríguez Terán?
+        </p>
+        <BabyGenderSelector value={babyGender} onChange={setBabyGender} disabled={locked} />
+      </div>
+
       {/* Individual awards */}
       <div
         className='rounded-xl p-4'
@@ -618,7 +710,11 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
           >
             Premios Individuales
           </h3>
-          {locked && <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>🔒</span>}
+          {locked && (
+            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+              🔒
+            </span>
+          )}
         </div>
         <div className='space-y-3'>
           {[
@@ -856,8 +952,8 @@ export default function TournamentPage() {
     }, 700);
   }
 
-  async function handleSaveAwards(goldenBoot, goldenBall) {
-    await saveAwards(user.uid, goldenBoot, goldenBall);
+  async function handleSaveAwards(goldenBoot, goldenBall, babyGender) {
+    await saveAwards(user.uid, goldenBoot, goldenBall, babyGender);
   }
 
   // ─── Computed bracket teams (using effectivePicks for cascade) ──────────────

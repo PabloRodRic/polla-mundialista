@@ -7,6 +7,7 @@ import FixtureIcon from '../assets/tournament.svg?react';
 import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
 import PredictionIcon from '../assets/prediction.svg?react';
+import logo from '../assets/logo-2.png';
 
 const NAV_TABS = [
   { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
@@ -30,7 +31,7 @@ export default function Layout() {
   }, [theme]);
 
   function toggleTheme() {
-    setTheme(t => t === 'dark' ? 'light' : 'dark');
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }
 
   // Start auto-sync for admin users
@@ -72,13 +73,16 @@ export default function Layout() {
           borderBottom: '1px solid var(--color-border)',
         }}
       >
-        <span
-          className='text-sm font-semibold tracking-widest uppercase'
-          style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
-        >
-          Polla 2026
-        </span>
-
+        <div className='flex items-center gap-1'>
+          {/* Logo */}
+          <img src={logo} alt='Logo' className='w-8 h-8 object-contain' />
+          <span
+            className='text-sm font-semibold tracking-widest uppercase'
+            style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+          >
+            Polla 2026
+          </span>
+        </div>
         <div className='flex items-center gap-3'>
           <button
             onClick={toggleTheme}
@@ -87,61 +91,86 @@ export default function Layout() {
             aria-label='Toggle theme'
           >
             {theme === 'dark' ? (
-              <svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='4'/><path d='M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41'/></svg>
+              <svg
+                xmlns='http://www.w3.org/2000/svg'
+                width='16'
+                height='16'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              >
+                <circle cx='12' cy='12' r='4' />
+                <path d='M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41' />
+              </svg>
             ) : (
-              <svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z'/></svg>
+              <svg
+                xmlns='http://www.w3.org/2000/svg'
+                width='16'
+                height='16'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              >
+                <path d='M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z' />
+              </svg>
             )}
           </button>
 
-        <div className='relative'>
-          <button onClick={() => setMenuOpen((o) => !o)} className='flex items-center gap-2'>
-            {user?.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt={profile?.name}
-                className='w-8 h-8 rounded-full object-cover'
-                style={{ border: '2px solid var(--color-border)' }}
-              />
-            ) : (
-              <div
-                className='w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold'
-                style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
-              >
-                {profile?.name?.[0] || '?'}
-              </div>
-            )}
-          </button>
-
-          {menuOpen && (
-            <>
-              <div className='fixed inset-0 z-10' onClick={() => setMenuOpen(false)} />
-              <div
-                className='absolute right-0 top-10 z-20 rounded-xl shadow-xl w-44 py-1 text-sm'
-                style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-              >
-                <div className='px-4 py-2 text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
-                  {profile?.name}
+          <div className='relative'>
+            <button onClick={() => setMenuOpen((o) => !o)} className='flex items-center gap-2'>
+              {user?.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={profile?.name}
+                  className='w-8 h-8 rounded-full object-cover'
+                  style={{ border: '2px solid var(--color-border)' }}
+                />
+              ) : (
+                <div
+                  className='w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold'
+                  style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
+                >
+                  {profile?.name?.[0] || '?'}
                 </div>
-                <div style={{ borderTop: '1px solid var(--color-border)' }} />
-                <button
-                  onClick={openEditName}
-                  className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
-                  style={{ color: 'var(--color-text-muted)' }}
+              )}
+            </button>
+
+            {menuOpen && (
+              <>
+                <div className='fixed inset-0 z-10' onClick={() => setMenuOpen(false)} />
+                <div
+                  className='absolute right-0 top-10 z-20 rounded-xl shadow-xl w-44 py-1 text-sm'
+                  style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
                 >
-                  Cambiar nombre
-                </button>
-                <div style={{ borderTop: '1px solid var(--color-border)' }} />
-                <button
-                  onClick={handleLogout}
-                  className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
-                  style={{ color: 'var(--color-accent-red)' }}
-                >
-                  Cerrar sesión
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+                  <div className='px-4 py-2 text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
+                    {profile?.name}
+                  </div>
+                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                  <button
+                    onClick={openEditName}
+                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    Cambiar nombre
+                  </button>
+                  <div style={{ borderTop: '1px solid var(--color-border)' }} />
+                  <button
+                    onClick={handleLogout}
+                    className='w-full text-left px-4 py-2 transition-colors hover:bg-surface-hover'
+                    style={{ color: 'var(--color-accent-red)' }}
+                  >
+                    Cerrar sesión
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -152,27 +181,46 @@ export default function Layout() {
 
       {/* Edit name modal */}
       {editingName && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center' style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setEditingName(false)}>
+        <div
+          className='fixed inset-0 z-50 flex items-center justify-center'
+          style={{ background: 'rgba(0,0,0,0.6)' }}
+          onClick={() => setEditingName(false)}
+        >
           <form
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             onSubmit={handleSaveName}
             className='rounded-2xl p-6 w-72 flex flex-col gap-4'
             style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
           >
-            <p className='text-sm font-semibold' style={{ color: 'var(--color-text)' }}>Cambiar nombre</p>
+            <p className='text-sm font-semibold' style={{ color: 'var(--color-text)' }}>
+              Cambiar nombre
+            </p>
             <input
               ref={nameInputRef}
               value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
+              onChange={(e) => setNameInput(e.target.value)}
               maxLength={40}
               className='rounded-lg px-3 py-2 text-sm outline-none w-full'
-              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text)',
+              }}
             />
             <div className='flex gap-2 justify-end'>
-              <button type='button' onClick={() => setEditingName(false)} className='px-4 py-1.5 rounded-lg text-sm' style={{ color: 'var(--color-text-muted)' }}>
+              <button
+                type='button'
+                onClick={() => setEditingName(false)}
+                className='px-4 py-1.5 rounded-lg text-sm'
+                style={{ color: 'var(--color-text-muted)' }}
+              >
                 Cancelar
               </button>
-              <button type='submit' className='px-4 py-1.5 rounded-lg text-sm font-semibold' style={{ background: 'var(--color-gold)', color: '#111318' }}>
+              <button
+                type='submit'
+                className='px-4 py-1.5 rounded-lg text-sm font-semibold'
+                style={{ background: 'var(--color-gold)', color: '#111318' }}
+              >
                 Guardar
               </button>
             </div>

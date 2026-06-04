@@ -47,7 +47,8 @@
 
   "individualAwards": {
     "goldenBoot": 5,
-    "goldenBall": 5
+    "goldenBall": 5,
+    "babyGender": 5
   },
 
   "liveMatchTiming": {

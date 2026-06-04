@@ -37,7 +37,11 @@ export default function LoginPage() {
   return (
     <div
       className='relative min-h-dvh flex flex-col items-center justify-center overflow-hidden px-4'
-      style={{ background: 'linear-gradient(160deg, #062e1b 0%, #111318 55%, #111318 100%)' }}
+      style={{
+        background: 'linear-gradient(160deg, #062e1b 0%, #111318 55%, #111318 100%)',
+        paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)',
+      }}
     >
       {/* Radial gradient accents */}
       <div className='pointer-events-none absolute inset-0'>
@@ -81,11 +85,10 @@ export default function LoginPage() {
           }}
         />
       ))}
-
+      {/* Logo */}
+      <img src={logo} alt='Logo' className='w-50 h-50 sm:w-60 sm:h-60 object-contain' />
       {/* Main card */}
-      <div className='relative z-10 w-full max-w-sm flex flex-col items-center gap-6 -mt-50'>
-        {/* Logo */}
-        <img src={logo} alt='Logo' className='w-60 h-60 object-contain' />
+      <div className='relative z-10 w-full max-w-sm flex flex-col items-center gap-6'>
         {/* Titles */}
         <div className='text-center'>
           <p
@@ -102,10 +105,9 @@ export default function LoginPage() {
               Familia Rodriguez
             </span>
           </h1>
-          <p className='mt-3 text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
+          <p className=' text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
             Predice los resultados del Mundial 2026.
-            <br />
-            Y el sexo de Frijolita/o Rodríguez Terán
+            <br />Y el sexo de Frijolita/o Rodríguez Terán
           </p>
         </div>
 

@@ -149,6 +149,7 @@ export default function RulesPage() {
       <Section title='Premios Individuales'>
         <PointRow label='Bota de Oro (goleador)' points={individualAwards.goldenBoot} />
         <PointRow label='Balón de Oro (mejor jugador)' points={individualAwards.goldenBall} />
+        <PointRow label='👶 El bebé será niño/niña' points={individualAwards.babyGender} />
       </Section>
 
       {/* Lock rule */}

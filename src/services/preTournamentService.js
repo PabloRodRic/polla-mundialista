@@ -86,12 +86,13 @@ export async function saveKnockoutScore(userId, matchId, side, value) {
 }
 
 /**
- * Save individual awards.
+ * Save individual awards (golden boot / golden ball) and the baby-gender pick.
+ * babyGender is 'boy' | 'girl' | '' (unset).
  */
-export async function saveAwards(userId, goldenBoot, goldenBall) {
+export async function saveAwards(userId, goldenBoot, goldenBall, babyGender = '') {
   await setDoc(
     doc(db, BRACKET_COLLECTION, userId),
-    { userId, goldenBoot, goldenBall, updatedAt: Timestamp.now() },
+    { userId, goldenBoot, goldenBall, babyGender, updatedAt: Timestamp.now() },
     { merge: true }
   )
 }
