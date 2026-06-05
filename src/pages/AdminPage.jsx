@@ -26,6 +26,7 @@ import {
   getSyncStatus,
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
+import { tlaLabel } from '../utils/teamLabels';
 
 function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
   return (
@@ -182,12 +183,12 @@ function MatchOverrideCard({ match, onSave }) {
               {match.flagA && (
                 <img src={`https://flagcdn.com/w40/${match.flagA}.png`} className='w-5 h-3.5 object-cover rounded' />
               )}
-              {match.tlaA || match.teamA}
+              {tlaLabel(match.tlaA) || match.teamA}
               <span style={{ color: 'var(--color-text-muted)' }}>vs</span>
               {match.flagB && (
                 <img src={`https://flagcdn.com/w40/${match.flagB}.png`} className='w-5 h-3.5 object-cover rounded' />
               )}
-              {match.tlaB || match.teamB}
+              {tlaLabel(match.tlaB) || match.teamB}
             </p>
             {match.adminOverride && (
               <span
@@ -268,8 +269,8 @@ function MatchOverrideCard({ match, onSave }) {
             }}
           >
             <option value='auto'>Auto (por marcador)</option>
-            <option value='home'>{match.tlaA || match.teamA} gana</option>
-            <option value='away'>{match.tlaB || match.teamB} gana</option>
+            <option value='home'>{tlaLabel(match.tlaA) || match.teamA} gana</option>
+            <option value='away'>{tlaLabel(match.tlaB) || match.teamB} gana</option>
           </select>
         </div>
       )}

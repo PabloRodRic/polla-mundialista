@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { tlaLabel } from '../utils/teamLabels';
 
 const KNOCKOUT_STAGES = ['roundOf32', 'roundOf16', 'quarterfinals', 'semifinals', 'thirdPlace', 'final'];
 
@@ -102,14 +103,14 @@ function TeamSlot({ match, side }) {
             color: 'var(--color-text-muted)',
           }}
         >
-          {tla?.slice(0, 3) || '?'}
+          {tlaLabel(tla)?.slice(0, 3) || '?'}
         </div>
       )}
       <span
         className='text-xs font-medium text-center'
         style={{ color: tbd ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}
       >
-        {tbd ? 'POR DEF.' : tla || name}
+        {tbd ? 'POR DEF.' : tlaLabel(tla) || name}
       </span>
     </div>
   );

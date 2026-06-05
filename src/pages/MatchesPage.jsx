@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { tlaLabel } from '../utils/teamLabels';
 
 const STAGE_LABELS = {
   group: 'Fase de Grupos',
@@ -94,7 +95,7 @@ function MatchCard({ match }) {
         <div className='flex-1 flex flex-col items-center gap-1'>
           <TeamFlag match={match} side='A' />
           <span className='text-xs text-center font-medium' style={{ color: 'var(--color-text-primary)' }}>
-            {match.tlaA || match.teamA}
+            {tlaLabel(match.tlaA) || match.teamA}
           </span>
         </div>
 
@@ -127,7 +128,7 @@ function MatchCard({ match }) {
         <div className='flex-1 flex flex-col items-center gap-1'>
           <TeamFlag match={match} side='B' />
           <span className='text-xs text-center font-medium' style={{ color: 'var(--color-text-primary)' }}>
-            {match.tlaB || match.teamB}
+            {tlaLabel(match.tlaB) || match.teamB}
           </span>
         </div>
       </div>

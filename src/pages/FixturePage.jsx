@@ -11,6 +11,7 @@ import {
   saveAwards,
 } from '../services/preTournamentService';
 import { computeGroupStandings, getBest3rdPlaceTeams, countPredictedMatches } from '../utils/standingsCalculator';
+import { tlaLabel } from '../utils/teamLabels';
 import {
   BRACKET_R32,
   BRACKET_R16,
@@ -183,7 +184,7 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
               fontFamily: 'var(--font-display)',
             }}
           >
-            {match.tlaA}
+            {tlaLabel(match.tlaA)}
           </span>
         </div>
 
@@ -216,7 +217,7 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
               fontFamily: 'var(--font-display)',
             }}
           >
-            {match.tlaB}
+            {tlaLabel(match.tlaB)}
           </span>
         </div>
       </div>
@@ -297,7 +298,7 @@ function StandingsTable({ standings, best3rdTlas }) {
         </thead>
         <tbody>
           {standings.map((team, idx) => (
-            <tr key={team.tla} style={{ background: rowStyle(idx), borderTop: '1px solid var(--color-border)' }}>
+            <tr key={tlaLabel(team.tla)} style={{ background: rowStyle(idx), borderTop: '1px solid var(--color-border)' }}>
               <td className='py-2 pl-3'>
                 <div className='flex items-center gap-1.5'>
                   {badge(idx)}
@@ -308,7 +309,7 @@ function StandingsTable({ standings, best3rdTlas }) {
                       className='w-5 h-3.5 object-cover rounded'
                     />
                   )}
-                  <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{team.tla}</span>
+                  <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{tlaLabel(team.tla)}</span>
                 </div>
               </td>
               <td className='py-2 px-1 text-center' style={{ color: 'var(--color-text-secondary)' }}>
@@ -453,7 +454,7 @@ function KnockoutMatchCard({
               color: 'var(--color-text-muted)',
             }}
           >
-            {team.tla}
+            {tlaLabel(team.tla)}
           </div>
         )}
         <span
@@ -463,7 +464,7 @@ function KnockoutMatchCard({
             fontFamily: 'var(--font-display)',
           }}
         >
-          {team.tla}
+          {tlaLabel(team.tla)}
         </span>
       </div>
     );
@@ -534,7 +535,7 @@ function KnockoutMatchCard({
               const isPicked = tiebreakerPick === team.tla;
               return (
                 <button
-                  key={team.tla}
+                  key={tlaLabel(team.tla)}
                   onClick={() => !locked && onPick(matchId, team.tla)}
                   disabled={locked}
                   className='flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition-all'
@@ -554,7 +555,7 @@ function KnockoutMatchCard({
                       fontFamily: 'var(--font-display)',
                     }}
                   >
-                    {team.tla}
+                    {tlaLabel(team.tla)}
                   </span>
                   {isPicked && <span style={{ color: 'var(--color-gold)' }}>✓</span>}
                 </button>
@@ -693,7 +694,7 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
                     className='text-sm font-bold'
                     style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
                   >
-                    {team.tla}
+                    {tlaLabel(team.tla)}
                   </span>
                 </div>
               ) : (
@@ -1223,12 +1224,12 @@ export default function TournamentPage() {
               </h3>
               <div className='space-y-1'>
                 {best3rdTeams.map((t, i) => (
-                  <div key={t.tla} className='flex items-center gap-2 text-xs'>
+                  <div key={tlaLabel(t.tla)} className='flex items-center gap-2 text-xs'>
                     <span style={{ color: 'var(--color-text-muted)', width: '16px' }}>{i + 1}.</span>
                     {t.flag && (
                       <img src={`https://flagcdn.com/w80/${t.flag}.png`} className='w-5 h-3.5 object-cover rounded' />
                     )}
-                    <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{t.tla}</span>
+                    <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{tlaLabel(t.tla)}</span>
                     <span style={{ color: 'var(--color-text-muted)' }}>(Grupo {t.fromGroup})</span>
                     <span
                       className='ml-auto font-bold'
