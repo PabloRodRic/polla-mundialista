@@ -93,7 +93,7 @@ export default function Layout() {
             className='text-sm font-semibold tracking-widest uppercase'
             style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
           >
-            Polla 2026
+            Mundial 2026
           </span>
         </div>
         <div className='flex items-center gap-3'>

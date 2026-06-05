@@ -42,6 +42,31 @@ const KNOCKOUT_ROUNDS = [
   { key: 'final', label: 'Final' },
 ];
 
+// Display order for the bracket overview. Match-number order doesn't read as a
+// tree, so we do an in-order traversal of the bracket: each round's matches end
+// up positioned between their two feeder matches, so winners visibly flow right.
+const BRACKET_ORDER_IDX = (() => {
+  const defsById = {};
+  for (const d of [...BRACKET_R32, ...BRACKET_R16, ...BRACKET_QF, ...BRACKET_SF, BRACKET_FINAL]) {
+    defsById[d.id] = d;
+  }
+  const idx = {};
+  let c = 0;
+  const dfs = (id) => {
+    const def = defsById[id];
+    if (def?.homeFrom) dfs(def.homeFrom);
+    idx[id] = c++;
+    if (def?.awayFrom) dfs(def.awayFrom);
+  };
+  dfs('final');
+  return idx;
+})();
+const byBracketOrder = (defs) => [...defs].sort((a, b) => BRACKET_ORDER_IDX[a.id] - BRACKET_ORDER_IDX[b.id]);
+const BRACKET_R32_VIEW = byBracketOrder(BRACKET_R32);
+const BRACKET_R16_VIEW = byBracketOrder(BRACKET_R16);
+const BRACKET_QF_VIEW = byBracketOrder(BRACKET_QF);
+const BRACKET_SF_VIEW = byBracketOrder(BRACKET_SF);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(timestamp) {
@@ -856,6 +881,104 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
   );
 }
 
+// ─── Bracket overview (read-only progression funnel) ────────────────────────
+
+// One team row inside a bracket match cell. Winner is gold + highlighted; once a
+// match is decided the loser is dimmed. Empty slot shows a faded dash.
+function BracketTeamRow({ team, winner }) {
+  const decided = !!winner;
+  const won = decided && team && team.tla === winner;
+  const lost = decided && team && team.tla !== winner;
+  return (
+    <div
+      className='flex items-center gap-1 px-1'
+      style={{
+        height: '18px',
+        background: won ? 'rgba(212,168,67,0.14)' : 'transparent',
+        opacity: lost ? 0.45 : 1,
+      }}
+    >
+      {team?.flag ? (
+        <img
+          src={`https://flagcdn.com/w20/${team.flag}.png`}
+          alt=''
+          className='w-3 h-2 object-cover rounded-sm shrink-0'
+        />
+      ) : (
+        <span className='w-3 shrink-0' />
+      )}
+      <span
+        className='text-[9px] font-bold truncate'
+        style={{ color: won ? 'var(--color-gold)' : 'var(--color-text-primary)' }}
+      >
+        {team ? tlaLabel(team.tla) : '—'}
+      </span>
+    </div>
+  );
+}
+
+// A single bracket match: two stacked team rows.
+function BracketMatch({ home, away, winner }) {
+  return (
+    <div className='rounded overflow-hidden' style={{ border: '1px solid var(--color-border)' }}>
+      <BracketTeamRow team={home} winner={winner} />
+      <div style={{ borderTop: '1px solid var(--color-border)' }} />
+      <BracketTeamRow team={away} winner={winner} />
+    </div>
+  );
+}
+
+// Columns of matchups per round — a funnel toward the final. Each column is
+// clickable to select that round. Reflects the user's current picks.
+function BracketOverview({ columns, selected, onSelect }) {
+  return (
+    <div
+      className='rounded-xl p-2'
+      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+    >
+      <div className='flex items-stretch gap-1.5 overflow-x-auto'>
+        {columns.map((col) => {
+          const isSel = col.key === selected;
+          return (
+            <div key={col.key} className='flex flex-col flex-1 min-w-16'>
+              <button
+                onClick={() => onSelect(col.key)}
+                className='mb-1 py-1 rounded text-[10px] font-semibold uppercase tracking-wide transition-colors'
+                style={{
+                  background: isSel ? 'var(--color-gold)' : 'transparent',
+                  color: isSel ? '#111318' : 'var(--color-text-muted)',
+                }}
+              >
+                {col.label}
+              </button>
+              <div className='flex-1 flex flex-col justify-around gap-1'>
+                {col.matches.map((m, i) => (
+                  <BracketMatch key={i} home={m.home} away={m.away} winner={m.winner} />
+                ))}
+              </div>
+              {col.bronze && (
+                <div className='mt-2'>
+                  <button
+                    onClick={() => onSelect('thirdPlace')}
+                    className='w-full mb-1 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide transition-colors'
+                    style={{
+                      background: selected === 'thirdPlace' ? 'var(--color-gold)' : 'transparent',
+                      color: selected === 'thirdPlace' ? '#111318' : 'var(--color-text-muted)',
+                    }}
+                  >
+                    3°
+                  </button>
+                  <BracketMatch home={col.bronze.home} away={col.bronze.away} winner={col.bronze.winner} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TournamentPage() {
@@ -1036,6 +1159,24 @@ export default function TournamentPage() {
     return tla ? teamsByTla[tla] || { tla, name: tla, flag: null } : null;
   }
 
+  // Bracket overview columns — matchups per round (home/away + winner), R32 → final
+  const bracketColumns = [
+    {
+      key: 'roundOf32',
+      label: '16avos',
+      matches: BRACKET_R32_VIEW.map((d) => ({ ...getR32Teams(d, groupStandings, best3rdTeams), winner: effectivePicks[d.id] })),
+    },
+    { key: 'roundOf16', label: 'Octavos', matches: BRACKET_R16_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
+    { key: 'quarterfinals', label: 'Cuartos', matches: BRACKET_QF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
+    { key: 'semifinals', label: 'Semis', matches: BRACKET_SF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
+    {
+      key: 'final',
+      label: 'Final',
+      matches: [{ ...getKOTeams(BRACKET_FINAL), winner: effectivePicks['final'] }],
+      bronze: { ...get3rdTeams(), winner: effectivePicks['3rd'] },
+    },
+  ];
+
   // Progress counters
   const totalGroupMatches = groupMatches.length;
   const predictedGroupMatches = countPredictedMatches(groupMatches, groupPredictions);
@@ -1162,8 +1303,8 @@ export default function TournamentPage() {
   }
 
   return (
-    <div className='max-w-lg mx-auto px-4 pt-4 pb-28'>
-      {/* Header */}
+    <div className='max-w-lg md:max-w-5xl mx-auto px-4 pt-4 pb-28'>
+      {/* Header — full width so the counter sits at the far right on wide screens */}
       <div className='flex items-baseline justify-between mb-4'>
         <h1
           className='text-xl font-bold'
@@ -1197,13 +1338,13 @@ export default function TournamentPage() {
           Todos los pronósticos se cerraran al iniciar el mundial. ¡Ponte Pilas!
         </div>
       )}
-      {/* Section tabs */}
-      <div className='flex gap-2 mb-5'>
+      {/* Section tabs — centered, taller on desktop */}
+      <div className='flex justify-center gap-2 mb-5'>
         {SECTIONS.map((s) => (
           <button
             key={s.key}
             onClick={() => setSection(s.key)}
-            className='flex-1 py-1.5 rounded-full text-xs font-medium transition-colors'
+            className='flex-1 md:flex-none md:px-10 py-1.5 md:py-3 rounded-full text-xs font-medium transition-colors'
             style={{
               background: section === s.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
               color: section === s.key ? '#111318' : 'var(--color-text-secondary)',
@@ -1223,13 +1364,13 @@ export default function TournamentPage() {
       {/* ── GRUPOS section ── */}
       {section === 'grupos' && (
         <div>
-          {/* Group selector — two rows of 6 for wider tap targets */}
-          <div className='grid grid-cols-6 gap-2 mb-4'>
+          {/* Group selector — two rows of 6 on phone, single full-width row of 12 on desktop */}
+          <div className='grid grid-cols-6 md:grid-cols-12 gap-2 mb-4'>
             {GROUPS.map((g) => (
               <button
                 key={g}
                 onClick={() => setSelectedGroup(g)}
-                className='w-full h-9 rounded-lg text-xs font-bold transition-colors'
+                className='w-full h-9 md:h-11 rounded-lg text-xs font-bold transition-colors'
                 style={{
                   background: selectedGroup === g ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: selectedGroup === g ? '#111318' : 'var(--color-text-secondary)',
@@ -1246,13 +1387,17 @@ export default function TournamentPage() {
               </button>
             ))}
           </div>
-          {/* Matches for selected group */}
-          <h2
-            className='text-xs font-semibold mb-2 uppercase tracking-wider'
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            Grupo {selectedGroup} — Partidos
-          </h2>
+          {/* Two columns on desktop: matches left, standings + best-3rd right (fill frame, width-capped) */}
+          <div className='md:flex md:justify-between md:gap-6 md:items-start'>
+            {/* Left column: matches */}
+            <div className='md:flex-1 md:max-w-lg'>
+              {/* Matches for selected group */}
+              <h2
+                className='text-xs font-semibold mb-2 uppercase tracking-wider'
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                Grupo {selectedGroup} — Partidos
+              </h2>
           {groupMatches
             .filter((m) => m.group === selectedGroup)
             .map((m) => (
@@ -1266,10 +1411,14 @@ export default function TournamentPage() {
                 onShowBets={openBets}
               />
             ))}
+            </div>
+            {/* end left column */}
 
+            {/* Right column: standings + best-3rd (sticky on desktop) */}
+            <div className='md:flex-1 md:max-w-100 md:sticky md:top-4'>
           {/* Standings */}
           <h2
-            className='text-xs font-semibold mt-4 mb-2 uppercase tracking-wider'
+            className='text-xs font-semibold mt-4 md:mt-0 mb-2 uppercase tracking-wider'
             style={{ color: 'var(--color-text-muted)' }}
           >
             Posiciones Grupo {selectedGroup}
@@ -1317,19 +1466,23 @@ export default function TournamentPage() {
               </div>
             </div>
           )}
+            </div>
+            {/* end right column */}
+          </div>
+          {/* end two-column grid */}
         </div>
       )}
 
       {/* ── ELIMINATORIAS section ── */}
       {section === 'eliminatorias' && (
         <div>
-          {/* Round selector — two rows of 3 for wider tap targets */}
-          <div className='grid grid-cols-3 gap-2 mb-4'>
+          {/* Round selector — two rows of 3 on phone, single full-width row of 6 on desktop */}
+          <div className='grid grid-cols-3 md:grid-cols-6 gap-2 mb-4'>
             {KNOCKOUT_ROUNDS.map((r) => (
               <button
                 key={r.key}
                 onClick={() => setKnockoutRound(r.key)}
-                className='w-full py-2 px-2 rounded-full text-xs font-medium transition-colors'
+                className='w-full h-9 md:h-11 px-2 rounded-lg text-xs font-bold transition-colors'
                 style={{
                   background: knockoutRound === r.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: knockoutRound === r.key ? '#111318' : 'var(--color-text-secondary)',
@@ -1346,6 +1499,14 @@ export default function TournamentPage() {
             ))}
           </div>
 
+          {/* Match cards (left/top) + bracket overview (right/below) */}
+          <div className='flex flex-col md:flex-row md:gap-6 md:items-start'>
+            {/* Bracket overview — below on phone, right on desktop */}
+            <div className='order-2 md:flex-1 md:min-w-0 mt-4 md:mt-0'>
+              <BracketOverview columns={bracketColumns} selected={knockoutRound} onSelect={setKnockoutRound} />
+            </div>
+            {/* Match cards — top on phone, left on desktop */}
+            <div className='order-1 w-full md:max-w-md md:shrink-0'>
           {/* R32 */}
           {knockoutRound === 'roundOf32' && (
             <>
@@ -1597,20 +1758,27 @@ export default function TournamentPage() {
                 </>
               );
             })()}
+            </div>
+            {/* end match cards column */}
+          </div>
+          {/* end bracket + cards */}
         </div>
       )}
 
       {/* ── PREMIOS section ── */}
+      {/* Constrained to phone width for now — wide layout pending a later stage */}
       {section === 'premios' && (
-        <AwardsSection
-          bracketData={bracketData}
-          champion={championTla ? teamsByTla[championTla] || { tla: championTla, flag: null } : null}
-          runnerUp={runnerUpTla ? teamsByTla[runnerUpTla] || { tla: runnerUpTla, flag: null } : null}
-          thirdPlace={thirdTla ? teamsByTla[thirdTla] || { tla: thirdTla, flag: null } : null}
-          onSave={handleSaveAwards}
-          locked={tournamentLocked}
-          onShowBets={openBets}
-        />
+        <div className='md:max-w-lg md:mx-auto'>
+          <AwardsSection
+            bracketData={bracketData}
+            champion={championTla ? teamsByTla[championTla] || { tla: championTla, flag: null } : null}
+            runnerUp={runnerUpTla ? teamsByTla[runnerUpTla] || { tla: runnerUpTla, flag: null } : null}
+            thirdPlace={thirdTla ? teamsByTla[thirdTla] || { tla: thirdTla, flag: null } : null}
+            onSave={handleSaveAwards}
+            locked={tournamentLocked}
+            onShowBets={openBets}
+          />
+        </div>
       )}
 
       <OthersBetsModal
