@@ -17,6 +17,8 @@ import {
   BRACKET_R16,
   BRACKET_QF,
   BRACKET_SF,
+  BRACKET_FINAL,
+  BRACKET_3RD,
   SLOT_LABEL,
   getR32Teams,
   buildTeamLookup,
@@ -369,6 +371,7 @@ function KnockoutMatchCard({
   onScoreChange,
   locked,
   matchDate,
+  matchNo,
   saving,
 }) {
   const [scoreA, setScoreA] = useState(propScoreA ?? null);
@@ -487,11 +490,13 @@ function KnockoutMatchCard({
         }`,
       }}
     >
-      {/* Date + saving */}
-      {(matchDate || saving) && (
+      {/* Match number + date + saving */}
+      {(matchNo || matchDate || saving) && (
         <div className='flex items-center justify-between mb-2'>
           <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            {formatDate(matchDate)}
+            {matchNo && <span style={{ fontWeight: 600 }}>Partido {matchNo}</span>}
+            {matchNo && matchDate && ' · '}
+            {matchDate && formatDate(matchDate)}
           </span>
           {saving && (
             <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
@@ -1313,6 +1318,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.roundOf32[idx]?.date}
+                    matchNo={def.match}
                     saving={savingMatch[def.id] || false}
                   />
                 );
@@ -1353,6 +1359,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.roundOf16[idx]?.date}
+                    matchNo={def.match}
                     saving={savingMatch[def.id] || false}
                   />
                 );
@@ -1393,6 +1400,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.quarterfinals[idx]?.date}
+                    matchNo={def.match}
                     saving={savingMatch[def.id] || false}
                   />
                 );
@@ -1433,6 +1441,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.semifinals[idx]?.date}
+                    matchNo={def.match}
                     saving={savingMatch[def.id] || false}
                   />
                 );
@@ -1472,6 +1481,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.thirdPlace[0]?.date}
+                    matchNo={BRACKET_3RD.match}
                     saving={savingMatch['3rd'] || false}
                   />
                 </>
@@ -1513,6 +1523,7 @@ export default function TournamentPage() {
                     onScoreChange={handleKnockoutScoreChange}
                     locked={tournamentLocked}
                     matchDate={koByStage.final[0]?.date}
+                    matchNo={BRACKET_FINAL.match}
                     saving={savingMatch['final'] || false}
                   />
                 </>
