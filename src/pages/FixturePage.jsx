@@ -1181,7 +1181,7 @@ export default function TournamentPage() {
             </span>
           )}
           <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            {predictedGroupMatches}/{totalGroupMatches} partidos
+            {predictedGroupMatches}/{totalGroupMatches} partidos completados
           </span>
         </div>
       </div>
@@ -1223,13 +1223,13 @@ export default function TournamentPage() {
       {/* ── GRUPOS section ── */}
       {section === 'grupos' && (
         <div>
-          {/* Group selector */}
-          <div className='flex gap-2 mb-4 flex-wrap'>
+          {/* Group selector — two rows of 6 for wider tap targets */}
+          <div className='grid grid-cols-6 gap-2 mb-4'>
             {GROUPS.map((g) => (
               <button
                 key={g}
                 onClick={() => setSelectedGroup(g)}
-                className='w-8 h-8 rounded-lg text-xs font-bold transition-colors'
+                className='w-full h-9 rounded-lg text-xs font-bold transition-colors'
                 style={{
                   background: selectedGroup === g ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: selectedGroup === g ? '#111318' : 'var(--color-text-secondary)',
@@ -1323,13 +1323,13 @@ export default function TournamentPage() {
       {/* ── ELIMINATORIAS section ── */}
       {section === 'eliminatorias' && (
         <div>
-          {/* Round selector */}
-          <div className='flex gap-2 mb-4 flex-wrap'>
+          {/* Round selector — two rows of 3 for wider tap targets */}
+          <div className='grid grid-cols-3 gap-2 mb-4'>
             {KNOCKOUT_ROUNDS.map((r) => (
               <button
                 key={r.key}
                 onClick={() => setKnockoutRound(r.key)}
-                className='py-0.75 px-3 rounded-full text-xs font-medium transition-colors'
+                className='w-full py-2 px-2 rounded-full text-xs font-medium transition-colors'
                 style={{
                   background: knockoutRound === r.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: knockoutRound === r.key ? '#111318' : 'var(--color-text-secondary)',
