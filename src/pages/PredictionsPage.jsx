@@ -18,6 +18,18 @@ const STAGE_LABEL = {
   final: 'Final',
 };
 
+// First official FIFA fixture number of each knockout stage. The API doesn't
+// carry these, so we assign them by date order within each stage (FIFA numbers
+// follow the schedule): R32 73–88, R16 89–96, QF 97–100, SF 101–102, 3rd 103, F 104.
+const STAGE_START_NUMBER = {
+  roundOf32: 73,
+  roundOf16: 89,
+  quarterfinals: 97,
+  semifinals: 101,
+  thirdPlace: 103,
+  final: 104,
+};
+
 // Opens when both teams are known
 function isLiveAvailable(match) {
   return !!(match.tlaA || match.teamA) && !!(match.tlaB || match.teamB);
@@ -119,7 +131,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, matchNumber }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -157,11 +169,12 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets }) {
     >
       {/* Stage + date + lock */}
       <div className='flex items-center justify-between mb-3'>
-        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+        <span className='text-xs truncate min-w-0' style={{ color: 'var(--color-text-muted)' }}>
+          {matchNumber ? `Partido ${matchNumber} · ` : ''}
           {STAGE_LABEL[match.stage] ? `${STAGE_LABEL[match.stage]} · ` : ''}
           {formatDate(match.date)}
         </span>
-        <div className='flex items-center gap-1.5'>
+        <div className='flex items-center gap-1.5 shrink-0 ml-2'>
           {locked && (
             <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
               🔒 Cerrado
@@ -368,12 +381,26 @@ export default function PredictionsPage() {
 
   const pendingCount = availableMatches.filter((m) => !predictions[m.id]).length;
 
+  // Derive each knockout match's official FIFA number from its stage + date order
+  const matchNumberById = {};
+  for (const stage of KNOCKOUT_STAGES) {
+    const start = STAGE_START_NUMBER[stage];
+    if (!start) continue;
+    matches
+      .filter((m) => m.stage === stage)
+      .slice()
+      .sort((a, b) => (a.date?.toDate?.() || 0) - (b.date?.toDate?.() || 0))
+      .forEach((m, i) => {
+        matchNumberById[m.id] = start + i;
+      });
+  }
+
   // The whole tab stays locked until the World Cup kicks off (first group match).
   // Before that, every prediction belongs in the Pronóstico tab.
   const tournamentStarted = tournamentStart ? new Date() >= tournamentStart : false;
 
   return (
-    <div className='max-w-lg mx-auto px-4 pt-4 pb-6'>
+    <div className='max-w-5xl mx-auto px-4 pt-4 pb-6'>
       <div className='flex items-baseline justify-between mb-1'>
         <h1
           className='text-xl font-bold'
@@ -400,7 +427,7 @@ export default function PredictionsPage() {
       ) : !tournamentStarted ? (
         /* Locked until the tournament starts */
         <div
-          className='mt-4 rounded-xl p-6 text-center'
+          className='mt-4 rounded-xl p-6 text-center max-w-lg mx-auto'
           style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
         >
           <p className='text-4xl mb-3'>🔒</p>
@@ -430,8 +457,8 @@ export default function PredictionsPage() {
             Marcá tus pronósticos en cada partido hasta una hora antes del inicio del mismo.
           </p>
 
-          {/* Filter tabs */}
-          <div className='flex gap-2 mb-4'>
+          {/* Filter tabs — centered on desktop */}
+          <div className='flex justify-center gap-2 mb-4'>
             {[
               { value: 'upcoming', label: 'Próximos' },
               { value: 'finished', label: 'Finalizados' },
@@ -440,7 +467,7 @@ export default function PredictionsPage() {
               <button
                 key={f.value}
                 onClick={() => setFilter(f.value)}
-                className='flex-1 py-1.5 rounded-full text-xs font-medium transition-colors'
+                className='flex-1 md:flex-none md:px-10 py-1.5 md:py-3 rounded-full text-xs font-medium transition-colors'
                 style={{
                   background: filter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
                   color: filter === f.value ? '#111318' : 'var(--color-text-secondary)',
@@ -464,16 +491,19 @@ export default function PredictionsPage() {
               </p>
             </div>
           ) : (
-            filtered.map((m) => (
-              <PredictionCard
-                key={m.id}
-                match={m}
-                prediction={predictions[m.id] ?? null}
-                onSave={savePrediction}
-                saving={saving[m.id] ?? false}
-                onShowBets={openBets}
-              />
-            ))
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-x-4 items-start'>
+              {filtered.map((m) => (
+                <PredictionCard
+                  key={m.id}
+                  match={m}
+                  prediction={predictions[m.id] ?? null}
+                  onSave={savePrediction}
+                  saving={saving[m.id] ?? false}
+                  onShowBets={openBets}
+                  matchNumber={matchNumberById[m.id]}
+                />
+              ))}
+            </div>
           )}
         </>
       )}
