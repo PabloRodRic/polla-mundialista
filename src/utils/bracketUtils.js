@@ -170,6 +170,99 @@ export function get3rdPlaceTeams(picks, teamsByTla) {
 }
 
 /**
+ * Resolve one user's entire knockout bracket from their stored predictions.
+ *
+ *   groupStandings — that user's predicted standings per group (from their group preds)
+ *   best3rdTeams   — getBest3rdPlaceTeams(groupStandings)
+ *   bracketData    — that user's flat bracket doc (ks_{id}_A/B scores, pick_{id} winners)
+ *   teamsByTla     — tla → { tla, name, flag } lookup
+ *
+ * Returns a map { [matchId]: { home, away, scoreA, scoreB, winner } } for every
+ * knockout slot (r32_01..r32_16, r16_01..r16_08, qf_1..qf_4, sf_1..sf_2,
+ * 'final', '3rd'). winner is the resolved winning TLA (null until decided).
+ * home/away are team objects (or null when that user hasn't resolved the slot).
+ * Winner of each match is derived the same way the FixturePage cascade does:
+ * higher score wins, ties fall back to the stored pick_{id} tiebreaker.
+ */
+export function resolveFullBracket(groupStandings, best3rdTeams, bracketData, teamsByTla) {
+  const ksScore = (id, side) => bracketData?.[`ks_${id}_${side}`] ?? null
+  const pick    = (id) => bracketData?.[`pick_${id}`] ?? null
+  const teamObj = (tla) => (tla ? teamsByTla[tla] || { tla, name: tla, flag: null } : null)
+
+  function effWinner(id, homeTla, awayTla) {
+    const a = ksScore(id, 'A')
+    const b = ksScore(id, 'B')
+    if (a !== null && b !== null) {
+      const nA = Number(a), nB = Number(b)
+      if (nA > nB) return homeTla || null
+      if (nA < nB) return awayTla || null
+      return pick(id) || null // tie → stored tiebreaker
+    }
+    return null
+  }
+
+  const winnerOf = {}        // matchId → winning tla
+  const result = {}
+
+  // R32 — teams come from the user's group standings + best-3rd assignment
+  for (const def of BRACKET_R32) {
+    const teams = getR32Teams(def, groupStandings, best3rdTeams)
+    winnerOf[def.id] = effWinner(def.id, teams.home?.tla, teams.away?.tla)
+    result[def.id] = {
+      home: teams.home, away: teams.away,
+      scoreA: ksScore(def.id, 'A'), scoreB: ksScore(def.id, 'B'),
+      winner: winnerOf[def.id],
+    }
+  }
+
+  // R16 / QF / SF — teams come from the previous round's winners
+  for (const round of [BRACKET_R16, BRACKET_QF, BRACKET_SF]) {
+    for (const def of round) {
+      const home = teamObj(winnerOf[def.homeFrom])
+      const away = teamObj(winnerOf[def.awayFrom])
+      winnerOf[def.id] = effWinner(def.id, home?.tla, away?.tla)
+      result[def.id] = {
+        home, away,
+        scoreA: ksScore(def.id, 'A'), scoreB: ksScore(def.id, 'B'),
+        winner: winnerOf[def.id],
+      }
+    }
+  }
+
+  // Final — winners of the two semifinals
+  {
+    const home = teamObj(winnerOf['sf_1'])
+    const away = teamObj(winnerOf['sf_2'])
+    winnerOf['final'] = effWinner('final', home?.tla, away?.tla)
+    result['final'] = {
+      home, away,
+      scoreA: ksScore('final', 'A'), scoreB: ksScore('final', 'B'),
+      winner: winnerOf['final'],
+    }
+  }
+
+  // 3rd place — losers of the two semifinals
+  {
+    const [sf1, sf2] = BRACKET_SF
+    const sf1Home = winnerOf[sf1.homeFrom], sf1Away = winnerOf[sf1.awayFrom], sf1Win = winnerOf['sf_1']
+    const sf1Lose = sf1Win === sf1Home ? sf1Away : sf1Win === sf1Away ? sf1Home : null
+    const sf2Home = winnerOf[sf2.homeFrom], sf2Away = winnerOf[sf2.awayFrom], sf2Win = winnerOf['sf_2']
+    const sf2Lose = sf2Win === sf2Home ? sf2Away : sf2Win === sf2Away ? sf2Home : null
+    const home = teamObj(sf1Lose)
+    const away = teamObj(sf2Lose)
+    result['3rd'] = {
+      home,
+      away,
+      scoreA: ksScore('3rd', 'A'),
+      scoreB: ksScore('3rd', 'B'),
+      winner: effWinner('3rd', home?.tla, away?.tla),
+    }
+  }
+
+  return result
+}
+
+/**
  * Check if all picks for a given round are complete.
  */
 export function isRoundComplete(matches, picks) {

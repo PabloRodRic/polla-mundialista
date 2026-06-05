@@ -8,6 +8,7 @@ import teamFlags from '../config/teamFlags.json'
 import scoring from '../config/scoring.json'
 import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator'
 import { BRACKET_R32, BRACKET_R16, BRACKET_QF, BRACKET_SF } from '../utils/bracketUtils'
+import { resolveAllUsersBrackets } from './preTournamentService'
 
 // ─── Stage / status normalization ───────────────────────────────────────────
 
@@ -554,6 +555,12 @@ async function calculateTournamentOutcomePoints() {
   const actual3rd = getMatchWinnerTla(thirdMatch)
   if (!actual3rd) return
 
+  // Each user's predicted champion / runner-up / 3rd come from their resolved
+  // bracket (score-based winners), NOT the pick_* fields — those only hold a
+  // tiebreaker when a match ended in a tie, so most users wouldn't be scored.
+  const resolvedByUser = {}
+  for (const u of await resolveAllUsersBrackets()) resolvedByUser[u.userId] = u.resolved
+
   const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'))
   const batch = writeBatch(db)
   const affectedUserIds = new Set()
@@ -566,19 +573,18 @@ async function calculateTournamentOutcomePoints() {
     let points = 0
     const tc = scoring.tournamentOutcome
 
-    if (data['pick_final'] === actualChampion) points += tc.correctChampion
+    const resolved = resolvedByUser[userId]
+    if (resolved) {
+      const f = resolved['final']
+      const champion = f?.winner || null
+      // Runner-up = the finalist who isn't the champion
+      const runnerUp = champion ? (champion === f.home?.tla ? f.away?.tla : f.home?.tla) : null
+      const third = resolved['3rd']?.winner || null
 
-    // Runner-up is the SF winner who lost the final
-    const userChampion = data['pick_final']
-    const sf1Pick = data['pick_sf_1']
-    const sf2Pick = data['pick_sf_2']
-    let userRunnerUp = null
-    if (userChampion && sf1Pick && sf2Pick) {
-      userRunnerUp = userChampion === sf1Pick ? sf2Pick : sf1Pick
+      if (champion && champion === actualChampion) points += tc.correctChampion
+      if (runnerUp && runnerUp === actualRunnerUp) points += tc.correctRunnerUp
+      if (third && third === actual3rd) points += tc.correct3rdPlace
     }
-    if (userRunnerUp && userRunnerUp === actualRunnerUp) points += tc.correctRunnerUp
-
-    if (data['pick_3rd'] === actual3rd) points += tc.correct3rdPlace
 
     batch.update(bracketDoc.ref, { tournamentOutcomePoints: points })
     affectedUserIds.add(userId)

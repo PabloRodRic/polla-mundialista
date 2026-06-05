@@ -9,7 +9,13 @@ import {
   saveBracketPick,
   saveKnockoutScore,
   saveAwards,
+  fetchOthersBets,
+  fetchOthersAwards,
+  fetchOthersOutcome,
+  fetchOthersKnockout,
 } from '../services/preTournamentService';
+import OthersBetsModal from '../components/OthersBetsModal';
+import BetsIconButton from '../components/BetsIconButton';
 import { computeGroupStandings, getBest3rdPlaceTeams, countPredictedMatches } from '../utils/standingsCalculator';
 import { tlaLabel } from '../utils/teamLabels';
 import {
@@ -88,7 +94,7 @@ function ScoreInput({ value, onChange, disabled }) {
 
 // ─── Group stage match card ────────────────────────────────────────────────────
 
-function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
+function GroupMatchCard({ match, prediction, onSave, saving, locked, onShowBets }) {
   const [scoreA, setScoreA] = useState(prediction?.predictedScoreA ?? null);
   const [scoreB, setScoreB] = useState(prediction?.predictedScoreB ?? null);
   const [prevPredA, setPrevPredA] = useState(prediction?.predictedScoreA);
@@ -150,17 +156,29 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked }) {
         <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
           Jornada {match.matchday} · {formatDate(match.date)}
         </span>
-        {isCancelled ? (
-          <span className='text-xs' style={{ color: 'var(--color-accent-red)' }}>
-            Cancelado
-          </span>
-        ) : (
-          saving && (
-            <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
-              Guardando...
+        <div className='flex items-center gap-1.5'>
+          {isCancelled ? (
+            <span className='text-xs' style={{ color: 'var(--color-accent-red)' }}>
+              Cancelado
             </span>
-          )
-        )}
+          ) : (
+            saving && (
+              <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
+                Guardando...
+              </span>
+            )
+          )}
+          <BetsIconButton
+            disabled={!locked}
+            onClick={() =>
+              onShowBets({
+                matchId: match.id,
+                type: 'group',
+                title: `${tlaLabel(match.tlaA)} vs ${tlaLabel(match.tlaB)}`,
+              })
+            }
+          />
+        </div>
       </div>
 
       <div className='flex items-center gap-2'>
@@ -373,6 +391,7 @@ function KnockoutMatchCard({
   matchDate,
   matchNo,
   saving,
+  onShowBets,
 }) {
   const [scoreA, setScoreA] = useState(propScoreA ?? null);
   const [scoreB, setScoreB] = useState(propScoreB ?? null);
@@ -490,21 +509,25 @@ function KnockoutMatchCard({
         }`,
       }}
     >
-      {/* Match number + date + saving */}
-      {(matchNo || matchDate || saving) && (
-        <div className='flex items-center justify-between mb-2'>
-          <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            {matchNo && <span style={{ fontWeight: 600 }}>Partido {matchNo}</span>}
-            {matchNo && matchDate && ' · '}
-            {matchDate && formatDate(matchDate)}
-          </span>
+      {/* Match number + date + saving + bets */}
+      <div className='flex items-center justify-between mb-2'>
+        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+          {matchNo && <span style={{ fontWeight: 600 }}>Partido {matchNo}</span>}
+          {matchNo && matchDate && ' · '}
+          {matchDate && formatDate(matchDate)}
+        </span>
+        <div className='flex items-center gap-1.5'>
           {saving && (
             <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
               Guardando...
             </span>
           )}
+          <BetsIconButton
+            disabled={!locked}
+            onClick={() => onShowBets({ matchId, type: 'knockout', title: matchNo ? `Partido ${matchNo}` : 'Partido' })}
+          />
         </div>
-      )}
+      </div>
 
       {/* Teams + score row */}
       <div className='flex items-center gap-2'>
@@ -617,7 +640,7 @@ function BabyGenderSelector({ value, onChange, disabled }) {
 
 // ─── Awards section ────────────────────────────────────────────────────────────
 
-function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, locked }) {
+function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, locked, onShowBets }) {
   const [goldenBoot, setGoldenBoot] = useState(bracketData?.goldenBoot || '');
   const [goldenBall, setGoldenBall] = useState(bracketData?.goldenBall || '');
   const [babyGender, setBabyGender] = useState(bracketData?.babyGender || '');
@@ -681,35 +704,41 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         </p>
         <div className='space-y-2'>
           {[
-            { label: '🏆 Campeón', team: champion },
-            { label: '🥈 Subcampeón', team: runnerUp },
-            { label: '🥉 Tercer Puesto', team: thirdPlace },
-          ].map(({ label, team }) => (
+            { label: '🏆 Campeón', team: champion, slot: 'champion' },
+            { label: '🥈 Subcampeón', team: runnerUp, slot: 'runnerUp' },
+            { label: '🥉 Tercer Puesto', team: thirdPlace, slot: 'thirdPlace' },
+          ].map(({ label, team, slot }) => (
             <div
               key={label}
-              className='flex items-center justify-between py-2 px-3 rounded-lg'
+              className='flex items-center justify-between py-2 pl-3 pr-1 rounded-lg'
               style={{ background: 'var(--color-surface)' }}
             >
               <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
                 {label}
               </span>
-              {team ? (
-                <div className='flex items-center gap-2'>
-                  {team.flag && (
-                    <img src={`https://flagcdn.com/w80/${team.flag}.png`} className='w-6 h-4 object-cover rounded' />
-                  )}
-                  <span
-                    className='text-sm font-bold'
-                    style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
-                  >
-                    {tlaLabel(team.tla)}
+              <div className='flex items-center gap-1'>
+                {team ? (
+                  <div className='flex items-center gap-2'>
+                    {team.flag && (
+                      <img src={`https://flagcdn.com/w80/${team.flag}.png`} className='w-6 h-4 object-cover rounded' />
+                    )}
+                    <span
+                      className='text-sm font-bold'
+                      style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+                    >
+                      {tlaLabel(team.tla)}
+                    </span>
+                  </div>
+                ) : (
+                  <span className='text-sm' style={{ color: 'var(--color-text-muted)' }}>
+                    Por definir
                   </span>
-                </div>
-              ) : (
-                <span className='text-sm' style={{ color: 'var(--color-text-muted)' }}>
-                  Por definir
-                </span>
-              )}
+                )}
+                <BetsIconButton
+                  disabled={!locked}
+                  onClick={() => onShowBets({ type: 'outcome', field: slot, title: label })}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -778,9 +807,15 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
 
         {/* Baby gender */}
         <div className='mb-4'>
-          <label className='block text-sm font-semibold mb-0.5' style={{ color: 'var(--color-text-primary)' }}>
-            👶🏻 El bebé será...
-          </label>
+          <div className='flex items-center justify-between'>
+            <label className='block text-sm font-semibold mb-0.5' style={{ color: 'var(--color-text-primary)' }}>
+              👶🏻 El bebé será...
+            </label>
+            <BetsIconButton
+              disabled={!locked}
+              onClick={() => onShowBets({ type: 'award', field: 'babyGender', title: 'Sexo del bebé' })}
+            />
+          </div>
           <p className='text-xs mb-2' style={{ color: 'var(--color-text-muted)' }}>
             ¿Frijolita o Frijolito Rodríguez Terán?
           </p>
@@ -790,13 +825,16 @@ function AwardsSection({ bracketData, champion, runnerUp, thirdPlace, onSave, lo
         {/* Golden boot / ball */}
         <div className='space-y-3'>
           {[
-            { label: '⚽ Bota de Oro', key: 'boot', value: goldenBoot, setter: setGoldenBoot },
-            { label: '⭐ Balón de Oro', key: 'ball', value: goldenBall, setter: setGoldenBall },
-          ].map(({ label, key, value, setter }) => (
+            { label: '⚽ Bota de Oro', key: 'boot', field: 'goldenBoot', value: goldenBoot, setter: setGoldenBoot },
+            { label: '⭐ Balón de Oro', key: 'ball', field: 'goldenBall', value: goldenBall, setter: setGoldenBall },
+          ].map(({ label, key, field, value, setter }) => (
             <div key={key}>
-              <label className='block text-xs mb-1' style={{ color: 'var(--color-text-secondary)' }}>
-                {label}
-              </label>
+              <div className='flex items-center justify-between mb-1'>
+                <label className='block text-xs' style={{ color: 'var(--color-text-secondary)' }}>
+                  {label}
+                </label>
+                <BetsIconButton disabled={!locked} onClick={() => onShowBets({ type: 'award', field, title: label })} />
+              </div>
               <input
                 type='text'
                 value={value}
@@ -837,6 +875,29 @@ export default function TournamentPage() {
   // Saving
   const debounceRef = useRef({});
   const [savingMatch, setSavingMatch] = useState({});
+
+  // "Ver pronósticos de otros" popup
+  const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'group' });
+  const [betsData, setBetsData] = useState([]);
+  const [betsLoading, setBetsLoading] = useState(false);
+
+  function openBets({ matchId, type, title, field }) {
+    setBetsModal({ open: true, title, type });
+    setBetsData([]);
+    setBetsLoading(true);
+    const fetcher =
+      type === 'award'
+        ? fetchOthersAwards(field)
+        : type === 'outcome'
+          ? fetchOthersOutcome(field)
+          : type === 'knockout'
+            ? fetchOthersKnockout(matchId)
+            : fetchOthersBets(matchId, type);
+    fetcher
+      .then(setBetsData)
+      .catch(() => setBetsData([]))
+      .finally(() => setBetsLoading(false));
+  }
 
   // ─── Load matches ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1202,6 +1263,7 @@ export default function TournamentPage() {
                 onSave={saveGroupMatchPrediction}
                 saving={savingMatch[m.id] || false}
                 locked={tournamentLocked}
+                onShowBets={openBets}
               />
             ))}
 
@@ -1320,6 +1382,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.roundOf32[idx]?.date}
                     matchNo={def.match}
                     saving={savingMatch[def.id] || false}
+                    onShowBets={openBets}
                   />
                 );
               })}
@@ -1361,6 +1424,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.roundOf16[idx]?.date}
                     matchNo={def.match}
                     saving={savingMatch[def.id] || false}
+                    onShowBets={openBets}
                   />
                 );
               })}
@@ -1402,6 +1466,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.quarterfinals[idx]?.date}
                     matchNo={def.match}
                     saving={savingMatch[def.id] || false}
+                    onShowBets={openBets}
                   />
                 );
               })}
@@ -1443,6 +1508,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.semifinals[idx]?.date}
                     matchNo={def.match}
                     saving={savingMatch[def.id] || false}
+                    onShowBets={openBets}
                   />
                 );
               })}
@@ -1483,6 +1549,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.thirdPlace[0]?.date}
                     matchNo={BRACKET_3RD.match}
                     saving={savingMatch['3rd'] || false}
+                    onShowBets={openBets}
                   />
                 </>
               );
@@ -1525,6 +1592,7 @@ export default function TournamentPage() {
                     matchDate={koByStage.final[0]?.date}
                     matchNo={BRACKET_FINAL.match}
                     saving={savingMatch['final'] || false}
+                    onShowBets={openBets}
                   />
                 </>
               );
@@ -1541,8 +1609,19 @@ export default function TournamentPage() {
           thirdPlace={thirdTla ? teamsByTla[thirdTla] || { tla: thirdTla, flag: null } : null}
           onSave={handleSaveAwards}
           locked={tournamentLocked}
+          onShowBets={openBets}
         />
       )}
+
+      <OthersBetsModal
+        open={betsModal.open}
+        onClose={() => setBetsModal((m) => ({ ...m, open: false }))}
+        title={betsModal.title}
+        type={betsModal.type}
+        bets={betsData}
+        loading={betsLoading}
+        currentUserId={user?.uid}
+      />
     </div>
   );
 }

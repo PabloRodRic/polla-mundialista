@@ -3,6 +3,9 @@ import { collection, query, orderBy, onSnapshot, doc, setDoc, Timestamp } from '
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { tlaLabel } from '../utils/teamLabels';
+import { fetchOthersBets } from '../services/preTournamentService';
+import OthersBetsModal from '../components/OthersBetsModal';
+import BetsIconButton from '../components/BetsIconButton';
 
 const KNOCKOUT_STAGES = ['roundOf32', 'roundOf16', 'quarterfinals', 'semifinals', 'thirdPlace', 'final'];
 
@@ -116,7 +119,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -158,16 +161,27 @@ function PredictionCard({ match, prediction, onSave, saving }) {
           {STAGE_LABEL[match.stage] ? `${STAGE_LABEL[match.stage]} · ` : ''}
           {formatDate(match.date)}
         </span>
-        {locked && (
-          <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            🔒 Cerrado
-          </span>
-        )}
-        {saving && (
-          <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
-            Guardando...
-          </span>
-        )}
+        <div className='flex items-center gap-1.5'>
+          {locked && (
+            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+              🔒 Cerrado
+            </span>
+          )}
+          {saving && (
+            <span className='text-xs' style={{ color: 'var(--color-gold)' }}>
+              Guardando...
+            </span>
+          )}
+          <BetsIconButton
+            onClick={() =>
+              onShowBets({
+                matchId: match.id,
+                type: 'live',
+                title: `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`,
+              })
+            }
+          />
+        </div>
       </div>
 
       {/* Teams + inputs */}
@@ -253,6 +267,21 @@ export default function PredictionsPage() {
   const [filter, setFilter] = useState('upcoming');
   const [tournamentStart, setTournamentStart] = useState(null);
   const debounceRef = useRef({});
+
+  // "Ver pronósticos de otros" popup
+  const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'live' });
+  const [betsData, setBetsData] = useState([]);
+  const [betsLoading, setBetsLoading] = useState(false);
+
+  function openBets({ matchId, type, title }) {
+    setBetsModal({ open: true, title, type });
+    setBetsData([]);
+    setBetsLoading(true);
+    fetchOthersBets(matchId, type)
+      .then(setBetsData)
+      .catch(() => setBetsData([]))
+      .finally(() => setBetsLoading(false));
+  }
 
   useEffect(() => {
     const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
@@ -442,11 +471,22 @@ export default function PredictionsPage() {
                 prediction={predictions[m.id] ?? null}
                 onSave={savePrediction}
                 saving={saving[m.id] ?? false}
+                onShowBets={openBets}
               />
             ))
           )}
         </>
       )}
+
+      <OthersBetsModal
+        open={betsModal.open}
+        onClose={() => setBetsModal((m) => ({ ...m, open: false }))}
+        title={betsModal.title}
+        type={betsModal.type}
+        bets={betsData}
+        loading={betsLoading}
+        currentUserId={user?.uid}
+      />
     </div>
   );
 }
