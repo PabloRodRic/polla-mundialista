@@ -298,7 +298,10 @@ function StandingsTable({ standings, best3rdTlas }) {
         </thead>
         <tbody>
           {standings.map((team, idx) => (
-            <tr key={tlaLabel(team.tla)} style={{ background: rowStyle(idx), borderTop: '1px solid var(--color-border)' }}>
+            <tr
+              key={tlaLabel(team.tla)}
+              style={{ background: rowStyle(idx), borderTop: '1px solid var(--color-border)' }}
+            >
               <td className='py-2 pl-3'>
                 <div className='flex items-center gap-1.5'>
                   {badge(idx)}
@@ -1116,7 +1119,7 @@ export default function TournamentPage() {
           </span>
         </div>
       </div>
-      {roundIncomplete && (
+      {predictedGroupMatches < totalGroupMatches && (
         <div
           className='mb-3 rounded-lg p-3 text-xs text-center'
           style={{
