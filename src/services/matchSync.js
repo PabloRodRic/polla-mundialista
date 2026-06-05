@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, getDocs, writeBatch,
-  query, where, orderBy, Timestamp, updateDoc, setDoc,
+  query, where, Timestamp, updateDoc, setDoc,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { fetchAllMatches } from './footballApi'
@@ -105,6 +105,21 @@ function getMatchWinnerTla(match) {
   return null
 }
 
+// True when a prediction nailed the exact scoreline (used as the leaderboard tiebreaker)
+function isExactScore(predA, predB, realA, realB) {
+  if (predA == null || predB == null || realA == null || realB == null) return false
+  return Number(predA) === Number(realA) && Number(predB) === Number(realB)
+}
+
+// Leaderboard order: most points, then most exact scorelines, then name (stable).
+export function compareLeaderboard(a, b) {
+  return (
+    (b.totalPoints || 0) - (a.totalPoints || 0) ||
+    (b.exactScores || 0) - (a.exactScores || 0) ||
+    (a.name || '').localeCompare(b.name || '')
+  )
+}
+
 // ─── Core sync ───────────────────────────────────────────────────────────────
 
 export async function syncMatchesFromAPI() {
@@ -149,7 +164,11 @@ export async function syncMatchesFromAPI() {
 
       // If admin has manually overridden this match, don't clobber their scores/status/winner
       if (prev?.adminOverride) {
-        const { scoreA, scoreB, status, winner, ...safeNormalized } = normalized
+        const safeNormalized = { ...normalized }
+        delete safeNormalized.scoreA
+        delete safeNormalized.scoreB
+        delete safeNormalized.status
+        delete safeNormalized.winner
         batch.set(matchRef, safeNormalized, { merge: true })
       } else {
         batch.set(matchRef, normalized, { merge: true })
@@ -263,7 +282,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
       { scoreA, scoreB },
       stage
     )
-    batch.update(predDoc.ref, { pointsEarned: points, calculatedAt: Timestamp.now() })
+    const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB)
+    batch.update(predDoc.ref, { pointsEarned: points, isExact, calculatedAt: Timestamp.now() })
     affectedUserIds.add(pred.userId)
   })
 
@@ -278,7 +298,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
       { scoreA, scoreB },
       stage
     )
-    batch.update(predDoc.ref, { pointsEarned: points, calculatedAt: Timestamp.now() })
+    const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB)
+    batch.update(predDoc.ref, { pointsEarned: points, isExact, calculatedAt: Timestamp.now() })
     affectedUserIds.add(pred.userId)
   })
 
@@ -296,7 +317,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
         stage,
         true  // isPreTournament: use scaled scoring per round
       )
-      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points })
+      const isExact = isExactScore(predA, predB, scoreA, scoreB)
+      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points, [`kse_${matchId}`]: isExact })
       if (data.userId) affectedUserIds.add(data.userId)
     }
   })
@@ -608,11 +630,12 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
 
   await updateDoc(matchRef, { pointsCalculated: true })
 
-  // Snapshot ranks before recalculating so UI can show position movement
-  const usersSnap = await getDocs(query(collection(db, 'users'), orderBy('totalPoints', 'desc')))
+  // Snapshot ranks before recalculating so UI can show position movement.
+  // Sort with the same tiebreaker the leaderboard uses (points → exact scores → name).
+  const usersSnap = await getDocs(collection(db, 'users'))
+  const ranked = usersSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort(compareLeaderboard)
   const rankSnapshot = {}
-  let rank = 1
-  usersSnap.forEach(d => { rankSnapshot[d.id] = rank++ })
+  ranked.forEach((u, i) => { rankSnapshot[u.id] = i + 1 })
   await setDoc(doc(db, 'leaderboard', 'rankSnapshot'), rankSnapshot)
 
   for (const userId of affectedUserIds) {
@@ -664,7 +687,7 @@ export async function resetPointsForMatch(matchId) {
     query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
   )
   for (const predDoc of predsSnap.docs) {
-    await updateDoc(predDoc.ref, { pointsEarned: 0 })
+    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false })
     affectedUserIds.add(predDoc.data().userId)
   }
 
@@ -672,7 +695,7 @@ export async function resetPointsForMatch(matchId) {
     query(collection(db, 'preTournamentGroupPredictions'), where('matchId', '==', String(matchId)))
   )
   for (const predDoc of groupPredsSnap.docs) {
-    await updateDoc(predDoc.ref, { pointsEarned: 0 })
+    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false })
     affectedUserIds.add(predDoc.data().userId)
   }
 
@@ -680,7 +703,7 @@ export async function resetPointsForMatch(matchId) {
   for (const bracketDoc of bracketSnap.docs) {
     const data = bracketDoc.data()
     if (`ksp_${matchId}` in data) {
-      await updateDoc(bracketDoc.ref, { [`ksp_${matchId}`]: 0 })
+      await updateDoc(bracketDoc.ref, { [`ksp_${matchId}`]: 0, [`kse_${matchId}`]: false })
       if (data.userId) affectedUserIds.add(data.userId)
     }
   }
@@ -693,18 +716,25 @@ export async function resetPointsForMatch(matchId) {
 
 async function recalculateTotalPoints(userId) {
   let total = 0
+  let exactScores = 0  // count of exact-scoreline hits — leaderboard tiebreaker
 
   // Live knockout predictions
   const predsSnap = await getDocs(
     query(collection(db, 'predictions'), where('userId', '==', userId))
   )
-  predsSnap.forEach(d => { total += d.data().pointsEarned || 0 })
+  predsSnap.forEach(d => {
+    total += d.data().pointsEarned || 0
+    if (d.data().isExact) exactScores++
+  })
 
   // Group stage predictions
   const groupPredsSnap = await getDocs(
     query(collection(db, 'preTournamentGroupPredictions'), where('userId', '==', userId))
   )
-  groupPredsSnap.forEach(d => { total += d.data().pointsEarned || 0 })
+  groupPredsSnap.forEach(d => {
+    total += d.data().pointsEarned || 0
+    if (d.data().isExact) exactScores++
+  })
 
   // Bracket doc: all scored fields
   const bracketSnap = await getDoc(doc(db, 'preTournamentBracket', userId))
@@ -714,12 +744,13 @@ async function recalculateTotalPoints(userId) {
       if (key.startsWith('ksp_')) total += val || 0  // bracket knockout scores (scaled)
       if (key.startsWith('gsp_')) total += val || 0  // group final standings
       if (key.startsWith('adv_')) total += val || 0  // team advancement
+      if (key.startsWith('kse_') && val) exactScores++  // bracket exact scorelines
     }
     total += data.tournamentOutcomePoints || 0  // champion / runner-up / 3rd place
     total += data.awardPoints || 0              // golden boot / golden ball
   }
 
-  await updateDoc(doc(db, 'users', userId), { totalPoints: total })
+  await updateDoc(doc(db, 'users', userId), { totalPoints: total, exactScores })
 }
 
 // Normalizes player names for comparison: lowercase, trimmed, accents stripped

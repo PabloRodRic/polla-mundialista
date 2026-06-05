@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { compareLeaderboard } from '../services/matchSync';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -121,10 +122,11 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('totalPoints', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(collection(db, 'users'), (snap) => {
       const data = [];
       snap.forEach((d) => data.push({ id: d.id, ...d.data() }));
+      // Sort by points, then exact-score count (tiebreaker), then name
+      data.sort(compareLeaderboard);
       setPlayers(data);
       setLoading(false);
     });

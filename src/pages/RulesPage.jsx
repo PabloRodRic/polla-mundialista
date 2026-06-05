@@ -63,6 +63,52 @@ export default function RulesPage() {
         Sistema de puntuación para la Polla Mundial 2026.
       </p>
 
+      {/* Prize pool / buy-in */}
+      <Section title='Entrada y Premios'>
+        {/* June 7th note */}
+        <div
+          className='rounded-lg p-3 mb-3 text-xs'
+          style={{
+            background: 'rgba(212,168,67,0.10)',
+            border: '1px solid rgba(212,168,67,0.35)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          📌 <strong>Nota:</strong> el monto de entrada y los premios finales se definirán el{' '}
+          <strong style={{ color: 'var(--color-gold)' }}>7 de junio</strong>. Lo de abajo es la propuesta
+          tentativa.
+        </div>
+
+        <div className='flex items-center justify-between py-2' style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
+            💵 Entrada
+          </span>
+          <span className='font-bold text-sm' style={{ color: 'var(--color-text-primary)' }}>
+            $20 por persona
+          </span>
+        </div>
+        <div className='flex items-center justify-between py-2' style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
+            🥇 1° lugar
+          </span>
+          <span className='font-bold text-sm' style={{ color: 'var(--color-gold)' }}>
+            70% del bote
+          </span>
+        </div>
+        <div className='flex items-center justify-between py-2' style={{ borderBottom: '1px solid var(--color-border)' }}>
+          <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
+            🥈 2° lugar
+          </span>
+          <span className='font-bold text-sm' style={{ color: 'var(--color-text-primary)' }}>
+            30% del bote
+          </span>
+        </div>
+        <p className='text-xs mt-3' style={{ color: 'var(--color-text-muted)' }}>
+          ⚖️ <strong>Desempate:</strong> en caso de empate en puntos, gana quien tenga más resultados exactos
+          acertados.
+        </p>
+      </Section>
+
       {/* Group stage */}
       <Section title='Fase de Grupos — Partidos'>
         <TierTable config={groupStage.matchResult} />
