@@ -8,7 +8,7 @@ import {
   getDoc,
   updateDoc,
   getDocs,
-  where,
+  // where,
   deleteField,
   Timestamp,
 } from 'firebase/firestore';
@@ -27,6 +27,8 @@ import {
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
 import { tlaLabel } from '../utils/teamLabels';
+import { fetchMatchPredictionStatus, fetchPronosticoCompletion } from '../services/preTournamentService';
+import PredictionStatusModal from '../components/PredictionStatusModal';
 
 function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
   return (
@@ -88,7 +90,30 @@ function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
   );
 }
 
-function MatchOverrideCard({ match, onSave }) {
+// People icon — opens the per-match prediction status (who has/hasn't submitted).
+function StatusIconButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label='Ver estado de predicciones'
+      title='Ver estado de predicciones'
+      className='flex items-center justify-center w-7 h-7 rounded-full transition-colors shrink-0'
+      style={{ color: 'var(--color-text-muted)' }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-hover)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+        <path
+          d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        />
+      </svg>
+    </button>
+  );
+}
+
+function MatchOverrideCard({ match, onSave, onShowStatus }) {
   const [scoreA, setScoreA] = useState(match.scoreA ?? '');
   const [scoreB, setScoreB] = useState(match.scoreB ?? '');
   const [status, setStatus] = useState(match.status);
@@ -203,21 +228,26 @@ function MatchOverrideCard({ match, onSave }) {
             {match.stage === 'group' ? `Grupo ${match.group} · J${match.matchday}` : match.stage}
           </p>
         </div>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className='text-xs rounded-lg px-2 py-1 border-0 outline-none'
-          style={{
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-secondary)',
-            border: '1px solid var(--color-border)',
-          }}
-        >
-          <option value='upcoming'>Próximo</option>
-          <option value='live'>En Vivo</option>
-          <option value='finished'>Finalizado</option>
-          <option value='cancelled'>Cancelado</option>
-        </select>
+        <div className='flex items-center gap-1.5 shrink-0'>
+          {/* Match-by-match prediction status — only the in-tournament "Predicciones"
+              tab (knockout matches) uses per-match predictions. */}
+          {match.stage !== 'group' && <StatusIconButton onClick={() => onShowStatus(match)} />}
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className='text-xs rounded-lg px-2 py-1 border-0 outline-none'
+            style={{
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <option value='upcoming'>Próximo</option>
+            <option value='live'>En Vivo</option>
+            <option value='finished'>Finalizado</option>
+            <option value='cancelled'>Cancelado</option>
+          </select>
+        </div>
       </div>
 
       <div className='flex items-center gap-3 mb-3'>
@@ -469,6 +499,134 @@ function AwardsCard({ onSave }) {
   );
 }
 
+// Lists every user's "Pronóstico" completion (groups / bracket / awards) so the
+// admin can chase whoever hasn't finished. One-time fetch with manual refresh —
+// resolving everyone's bracket is heavy, so we don't subscribe live.
+function PronosticoStatusCard() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    fetchPronosticoCompletion()
+      .then(setRows)
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }
+
+  // Initial fetch — set state only in the async callbacks so the effect body
+  // doesn't trigger a synchronous setState/cascading render.
+  useEffect(() => {
+    let active = true;
+    fetchPronosticoCompletion()
+      .then((d) => active && setRows(d))
+      .catch(() => active && setRows([]))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const completed = rows.filter((r) => r.complete).length;
+
+  function badge(ok, label) {
+    return (
+      <span
+        className='text-[10px] px-1.5 py-0.5 rounded font-medium'
+        style={{
+          background: ok ? 'rgba(13,107,63,0.18)' : 'rgba(231,76,60,0.12)',
+          color: ok ? 'var(--color-pitch-light)' : 'var(--color-accent-red)',
+        }}
+      >
+        {ok ? '✓' : '✗'} {label}
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className='rounded-xl p-4 mb-4'
+      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+    >
+      <div className='flex items-center justify-between mb-3'>
+        <h2 className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--color-gold)' }}>
+          Estado de Pronósticos
+        </h2>
+        <div className='flex items-center gap-2'>
+          {!loading && (
+            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+              {completed}/{rows.length} completos
+            </span>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className='text-xs px-2 py-1 rounded-lg transition-opacity'
+            style={{
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+              border: '1px solid var(--color-border)',
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            {loading ? '...' : '↻'}
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className='text-sm text-center py-4' style={{ color: 'var(--color-text-muted)' }}>
+          Cargando...
+        </p>
+      ) : rows.length === 0 ? (
+        <p className='text-sm text-center py-4' style={{ color: 'var(--color-text-muted)' }}>
+          No hay usuarios.
+        </p>
+      ) : (
+        <ul className='flex flex-col gap-1.5'>
+          {rows.map((r) => (
+            <li
+              key={r.userId}
+              className='flex items-center gap-2.5 rounded-xl px-2.5 py-2'
+              style={{
+                background: 'var(--color-surface)',
+                border: `1px solid ${r.complete ? 'var(--color-border)' : 'rgba(231,76,60,0.35)'}`,
+              }}
+            >
+              {r.photoURL ? (
+                <img src={r.photoURL} alt={r.name} className='w-7 h-7 rounded-full object-cover shrink-0' />
+              ) : (
+                <div
+                  className='w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0'
+                  style={{ background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)' }}
+                >
+                  {(r.name?.[0] || '?').toUpperCase()}
+                </div>
+              )}
+              <div className='min-w-0 flex-1'>
+                <p className='text-sm font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
+                  {r.name}
+                </p>
+                <div className='flex flex-wrap items-center gap-1 mt-1'>
+                  {badge(r.groupsComplete, `Grupos ${r.predictedGroups}/${r.totalGroups}`)}
+                  {badge(r.bracketComplete, 'Llaves')}
+                  {badge(r.awardsComplete, 'Premios')}
+                </div>
+              </div>
+              <span
+                className='text-lg shrink-0'
+                style={{ color: r.complete ? 'var(--color-pitch-light)' : 'var(--color-accent-red)' }}
+              >
+                {r.complete ? '✓' : '•'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { profile } = useAuth();
   const [matches, setMatches] = useState([]);
@@ -479,6 +637,22 @@ export default function AdminPage() {
   const [toast, setToast] = useState(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  // Per-match "who has/hasn't submitted their prediction" popup
+  const [statusModal, setStatusModal] = useState({ open: false, title: '' });
+  const [statusRows, setStatusRows] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  function openStatus(match) {
+    const title = `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`;
+    setStatusModal({ open: true, title });
+    setStatusRows([]);
+    setStatusLoading(true);
+    fetchMatchPredictionStatus(match.id)
+      .then(setStatusRows)
+      .catch(() => setStatusRows([]))
+      .finally(() => setStatusLoading(false));
+  }
 
   useEffect(() => {
     const unsub = onSyncStatusChange(setSyncStatus);
@@ -516,23 +690,23 @@ export default function AdminPage() {
     }
   }
 
-  async function handleClearAllOverrides() {
-    const snap = await getDocs(query(collection(db, 'matches'), where('adminOverride', '==', true)));
-    if (snap.empty) {
-      showToast('No hay ajustes manuales activos', 'error');
-      return;
-    }
-    const matchIds = [];
-    snap.forEach((d) => matchIds.push(d.id));
-    for (const matchId of matchIds) {
-      await resetPointsForMatch(matchId);
-      await updateDoc(doc(db, 'matches', matchId), {
-        adminOverride: deleteField(),
-        adminOverriddenAt: deleteField(),
-      });
-    }
-    showToast(`${matchIds.length} ajuste(s) manual(es) borrado(s)`);
-  }
+  // async function handleClearAllOverrides() {
+  //   const snap = await getDocs(query(collection(db, 'matches'), where('adminOverride', '==', true)));
+  //   if (snap.empty) {
+  //     showToast('No hay ajustes manuales activos', 'error');
+  //     return;
+  //   }
+  //   const matchIds = [];
+  //   snap.forEach((d) => matchIds.push(d.id));
+  //   for (const matchId of matchIds) {
+  //     await resetPointsForMatch(matchId);
+  //     await updateDoc(doc(db, 'matches', matchId), {
+  //       adminOverride: deleteField(),
+  //       adminOverriddenAt: deleteField(),
+  //     });
+  //   }
+  //   showToast(`${matchIds.length} ajuste(s) manual(es) borrado(s)`);
+  // }
 
   async function handleResetAllPoints() {
     setResetting(true);
@@ -630,7 +804,7 @@ export default function AdminPage() {
       </button>
 
       {/* [TEMP] Clear all overrides */}
-      <button
+      {/* <button
         onClick={handleClearAllOverrides}
         className='w-full py-2 rounded-xl text-xs font-medium mb-2 transition-opacity'
         style={{
@@ -640,10 +814,10 @@ export default function AdminPage() {
         }}
       >
         [TEST] Borrar todos los ajustes manuales
-      </button>
+      </button> */}
 
       {/* [TEMP] Reset all points */}
-      <button
+      {/* <button
         onClick={() => setShowResetDialog(true)}
         className='w-full py-2 rounded-xl text-xs font-medium mb-4 transition-opacity'
         style={{
@@ -653,7 +827,7 @@ export default function AdminPage() {
         }}
       >
         [TEST] Resetear puntos de todos los usuarios
-      </button>
+      </button> */}
 
       {/* Reset points confirmation dialog */}
       {showResetDialog && (
@@ -707,6 +881,9 @@ export default function AdminPage() {
       {/* Individual awards */}
       <AwardsCard onSave={(msg, type) => showToast(msg, type)} />
 
+      {/* Pronóstico completion per user */}
+      <PronosticoStatusCard />
+
       {/* Manual overrides */}
       <h2 className='text-sm font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-text-muted)' }}>
         Ajuste Manual de Resultados
@@ -744,9 +921,22 @@ export default function AdminPage() {
         </div>
       ) : (
         filtered.map((m) => (
-          <MatchOverrideCard key={m.id} match={m} onSave={(msg) => showToast(msg || 'Resultado guardado')} />
+          <MatchOverrideCard
+            key={m.id}
+            match={m}
+            onSave={(msg) => showToast(msg || 'Resultado guardado')}
+            onShowStatus={openStatus}
+          />
         ))
       )}
+
+      <PredictionStatusModal
+        open={statusModal.open}
+        onClose={() => setStatusModal((s) => ({ ...s, open: false }))}
+        title={statusModal.title}
+        rows={statusRows}
+        loading={statusLoading}
+      />
     </div>
   );
 }

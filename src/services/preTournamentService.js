@@ -3,8 +3,25 @@ import {
   query, where, Timestamp,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator'
-import { buildTeamLookup, resolveFullBracket } from '../utils/bracketUtils'
+import { computeGroupStandings, getBest3rdPlaceTeams, countPredictedMatches } from '../utils/standingsCalculator'
+import {
+  buildTeamLookup,
+  resolveFullBracket,
+  BRACKET_R32,
+  BRACKET_R16,
+  BRACKET_QF,
+  BRACKET_SF,
+} from '../utils/bracketUtils'
+
+// Every knockout slot that must resolve to a winner for a bracket to count as complete.
+const ALL_BRACKET_SLOTS = [
+  ...BRACKET_R32.map(d => d.id),
+  ...BRACKET_R16.map(d => d.id),
+  ...BRACKET_QF.map(d => d.id),
+  ...BRACKET_SF.map(d => d.id),
+  'final',
+  '3rd',
+]
 
 const GROUP_PREDS_COLLECTION = 'preTournamentGroupPredictions'
 const BRACKET_COLLECTION     = 'preTournamentBracket'
@@ -237,6 +254,123 @@ export async function fetchOthersOutcome(slot) {
   }
   bets.sort((a, b) => a.name.localeCompare(b.name))
   return bets
+}
+
+// ─── Admin: completion tracking ───────────────────────────────────────────────
+
+/**
+ * Admin view: for one in-tournament match (the match-by-match "Predicciones" tab,
+ * stored in the `predictions` collection), report which users have submitted a
+ * complete prediction and which haven't.
+ * Returns [{ userId, name, photoURL, done }] — pending users first, then by name.
+ */
+export async function fetchMatchPredictionStatus(matchId) {
+  const usersMap = await fetchUsersMap()
+  const snap = await getDocs(
+    query(collection(db, 'predictions'), where('matchId', '==', String(matchId)))
+  )
+  const doneSet = new Set()
+  snap.forEach(d => {
+    const data = d.data()
+    if (data.predictedScoreA != null && data.predictedScoreB != null) doneSet.add(data.userId)
+  })
+  const rows = Object.entries(usersMap).map(([userId, u]) => ({
+    userId,
+    name: u.name || 'Anónimo',
+    photoURL: u.photoURL || null,
+    done: doneSet.has(userId),
+  }))
+  rows.sort((a, b) => (a.done === b.done ? a.name.localeCompare(b.name) : a.done ? 1 : -1))
+  return rows
+}
+
+/**
+ * Admin view: per-user completion of the all-at-once "Pronóstico" (group scores,
+ * full knockout bracket and the three individual awards). Heavy — reads all group
+ * fixtures, every group prediction and every bracket doc, then resolves each
+ * user's bracket cascade. Users with no group predictions count as incomplete.
+ * Returns [{ userId, name, photoURL, predictedGroups, totalGroups, groupsComplete,
+ *            bracketComplete, awardsComplete, complete }] — incomplete first, then by name.
+ */
+export async function fetchPronosticoCompletion() {
+  const usersMap = await fetchUsersMap()
+
+  // Group fixtures (shared) → team lookup + per-group team/match lists
+  const matchesSnap = await getDocs(
+    query(collection(db, 'matches'), where('stage', '==', 'group'))
+  )
+  const groupMatches = []
+  matchesSnap.forEach(d => groupMatches.push({ id: d.id, ...d.data() }))
+  const teamsByTla = buildTeamLookup(groupMatches)
+  const totalGroups = groupMatches.length
+
+  const matchesByGroup = {}
+  for (const m of groupMatches) {
+    if (!m.group) continue
+    ;(matchesByGroup[m.group] ||= []).push(m)
+  }
+  const groupTeams = {}
+  for (const [g, gms] of Object.entries(matchesByGroup)) {
+    const map = {}
+    for (const m of gms) {
+      if (m.tlaA) map[m.tlaA] = { tla: m.tlaA, name: m.teamA, flag: m.flagA }
+      if (m.tlaB) map[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB }
+    }
+    groupTeams[g] = Object.values(map)
+  }
+
+  // Every user's group predictions, keyed userId → { matchId: pred }
+  const groupPredsSnap = await getDocs(collection(db, GROUP_PREDS_COLLECTION))
+  const groupPredsByUser = {}
+  groupPredsSnap.forEach(d => {
+    const p = d.data()
+    ;(groupPredsByUser[p.userId] ||= {})[p.matchId] = p
+  })
+
+  // Every user's bracket doc (knockout scores + awards), keyed by userId
+  const bracketSnap = await getDocs(collection(db, BRACKET_COLLECTION))
+  const bracketByUser = {}
+  bracketSnap.forEach(d => {
+    const data = d.data()
+    bracketByUser[data.userId || d.id] = data
+  })
+
+  const rows = []
+  for (const [userId, u] of Object.entries(usersMap)) {
+    const userPreds = groupPredsByUser[userId] || {}
+    const predictedGroups = countPredictedMatches(groupMatches, userPreds)
+    const groupsComplete = totalGroups > 0 && predictedGroups === totalGroups
+
+    // Bracket only resolves once there are group predictions to seed the standings.
+    let bracketComplete = false
+    if (Object.keys(userPreds).length > 0) {
+      const standings = {}
+      for (const [g, teams] of Object.entries(groupTeams)) {
+        standings[g] = computeGroupStandings(teams, matchesByGroup[g], userPreds)
+      }
+      const best3rd = getBest3rdPlaceTeams(standings)
+      const resolved = resolveFullBracket(standings, best3rd, bracketByUser[userId], teamsByTla)
+      bracketComplete = ALL_BRACKET_SLOTS.every(s => !!resolved[s]?.winner)
+    }
+
+    const b = bracketByUser[userId]
+    const awardsComplete = !!(b?.goldenBoot && b?.goldenBall && b?.babyGender)
+
+    rows.push({
+      userId,
+      name: u.name || 'Anónimo',
+      photoURL: u.photoURL || null,
+      predictedGroups,
+      totalGroups,
+      groupsComplete,
+      bracketComplete,
+      awardsComplete,
+      complete: groupsComplete && bracketComplete && awardsComplete,
+    })
+  }
+  // Incomplete first (so the admin sees who to chase), then alphabetical
+  rows.sort((a, b) => (a.complete === b.complete ? a.name.localeCompare(b.name) : a.complete ? 1 : -1))
+  return rows
 }
 
 // ─── Group stage predictions ──────────────────────────────────────────────────
