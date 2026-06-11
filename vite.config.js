@@ -11,13 +11,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss(), svgr()],
     server: {
       proxy: {
-        // In dev, forward /football-api/* → https://api.football-data.org/v4/*
-        // and inject the API key so it never leaks into the client bundle.
+        // In dev, forward /football-api/* → local polla-proxy server
         '/football-api': {
-          target: 'https://api.football-data.org/v4',
+          target: 'http://localhost:3000',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/football-api/, ''),
-          headers: { 'X-Auth-Token': env.VITE_FOOTBALL_DATA_API_KEY || '' },
         },
       },
     },
