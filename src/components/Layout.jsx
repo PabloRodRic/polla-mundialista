@@ -7,10 +7,12 @@ import FixtureIcon from '../assets/tournament.svg?react';
 import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
 import PredictionIcon from '../assets/prediction.svg?react';
+import MatchesIcon from '../assets/matches.svg?react';
 import logo from '../assets/logo-2.png';
 import { APP_VERSION } from '../version';
 
 const NAV_TABS = [
+  { path: '/partidos', icon: MatchesIcon, label: 'Partidos' },
   { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
   { path: '/predicciones', icon: PredictionIcon, label: 'Predicciones' },
   { path: '/tabla', icon: LeaderboardIcon, label: 'Tabla' },

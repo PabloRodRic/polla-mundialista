@@ -1164,11 +1164,26 @@ export default function TournamentPage() {
     {
       key: 'roundOf32',
       label: '16avos',
-      matches: BRACKET_R32_VIEW.map((d) => ({ ...getR32Teams(d, groupStandings, best3rdTeams), winner: effectivePicks[d.id] })),
+      matches: BRACKET_R32_VIEW.map((d) => ({
+        ...getR32Teams(d, groupStandings, best3rdTeams),
+        winner: effectivePicks[d.id],
+      })),
     },
-    { key: 'roundOf16', label: 'Octavos', matches: BRACKET_R16_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
-    { key: 'quarterfinals', label: 'Cuartos', matches: BRACKET_QF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
-    { key: 'semifinals', label: 'Semis', matches: BRACKET_SF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })) },
+    {
+      key: 'roundOf16',
+      label: 'Octavos',
+      matches: BRACKET_R16_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })),
+    },
+    {
+      key: 'quarterfinals',
+      label: 'Cuartos',
+      matches: BRACKET_QF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })),
+    },
+    {
+      key: 'semifinals',
+      label: 'Semis',
+      matches: BRACKET_SF_VIEW.map((d) => ({ ...getKOTeams(d), winner: effectivePicks[d.id] })),
+    },
     {
       key: 'final',
       label: 'Final',
@@ -1312,19 +1327,18 @@ export default function TournamentPage() {
         >
           Pronóstico
         </h1>
-        <div className='flex items-center gap-2'>
-          {tournamentLocked && (
-            <span
-              className='text-xs px-2 py-1 rounded-full'
-              style={{ background: 'rgba(231,76,60,0.15)', color: 'var(--color-accent-red)' }}
-            >
-              🔒 Cerrado
-            </span>
-          )}
+        {tournamentLocked ? (
+          <span
+            className='text-xs px-2 py-1 rounded-full whitespace-nowrap'
+            style={{ background: 'rgba(231,76,60,0.15)', color: 'var(--color-accent-red)' }}
+          >
+            🔒 Cerrado
+          </span>
+        ) : (
           <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
             {predictedGroupMatches}/{totalGroupMatches} partidos completados
           </span>
-        </div>
+        )}
       </div>
       {predictedGroupMatches < totalGroupMatches && (
         <div
@@ -1398,74 +1412,77 @@ export default function TournamentPage() {
               >
                 Grupo {selectedGroup} — Partidos
               </h2>
-          {groupMatches
-            .filter((m) => m.group === selectedGroup)
-            .map((m) => (
-              <GroupMatchCard
-                key={m.id}
-                match={m}
-                prediction={groupPredictions[m.id] || null}
-                onSave={saveGroupMatchPrediction}
-                saving={savingMatch[m.id] || false}
-                locked={tournamentLocked}
-                onShowBets={openBets}
-              />
-            ))}
+              {groupMatches
+                .filter((m) => m.group === selectedGroup)
+                .map((m) => (
+                  <GroupMatchCard
+                    key={m.id}
+                    match={m}
+                    prediction={groupPredictions[m.id] || null}
+                    onSave={saveGroupMatchPrediction}
+                    saving={savingMatch[m.id] || false}
+                    locked={tournamentLocked}
+                    onShowBets={openBets}
+                  />
+                ))}
             </div>
             {/* end left column */}
 
             {/* Right column: standings + best-3rd (sticky on desktop) */}
             <div className='md:flex-1 md:max-w-100 md:sticky md:top-4'>
-          {/* Standings */}
-          <h2
-            className='text-xs font-semibold mt-4 md:mt-0 mb-2 uppercase tracking-wider'
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            Posiciones Grupo {selectedGroup}
-          </h2>
-          <StandingsTable standings={groupStandings[selectedGroup] || []} best3rdTlas={best3rdTlas} />
+              {/* Standings */}
+              <h2
+                className='text-xs font-semibold mt-4 md:mt-0 mb-2 uppercase tracking-wider'
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                Posiciones Grupo {selectedGroup}
+              </h2>
+              <StandingsTable standings={groupStandings[selectedGroup] || []} best3rdTlas={best3rdTlas} />
 
-          {/* Legend */}
-          <div className='mt-3 flex gap-4 text-xs' style={{ color: 'var(--color-text-muted)' }}>
-            <span>🥇 Clasifica (1°)</span>
-            <span>🥈 Clasifica (2°)</span>
-            <span style={{ color: '#60a5fa' }}>✦ Mejor 3°</span>
-          </div>
-
-          {/* Best 3rd summary */}
-          {best3rdTeams.length > 0 && (
-            <div
-              className='mt-4 rounded-xl p-3'
-              style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-            >
-              <h3 className='text-xs font-semibold mb-2' style={{ color: 'var(--color-text-muted)' }}>
-                Mejores Terceros ({best3rdTeams.length}/8 clasificados)
-              </h3>
-              <div className='space-y-1'>
-                {best3rdTeams.map((t, i) => (
-                  <div key={tlaLabel(t.tla)} className='flex items-center gap-2 text-xs'>
-                    <span style={{ color: 'var(--color-text-muted)', width: '16px' }}>{i + 1}.</span>
-                    {t.flag && (
-                      <img src={`https://flagcdn.com/w80/${t.flag}.png`} className='w-5 h-3.5 object-cover rounded' />
-                    )}
-                    <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{tlaLabel(t.tla)}</span>
-                    <span style={{ color: 'var(--color-text-muted)' }}>(Grupo {t.fromGroup})</span>
-                    <span
-                      className='ml-auto font-bold'
-                      style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
-                    >
-                      {t.pts} pts
-                    </span>
-                  </div>
-                ))}
-                {Array.from({ length: Math.max(0, 8 - best3rdTeams.length) }).map((_, i) => (
-                  <div key={`empty-${i}`} className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-                    {best3rdTeams.length + i + 1}. — (ingresa más resultados)
-                  </div>
-                ))}
+              {/* Legend */}
+              <div className='mt-3 flex gap-4 text-xs' style={{ color: 'var(--color-text-muted)' }}>
+                <span>🥇 Clasifica (1°)</span>
+                <span>🥈 Clasifica (2°)</span>
+                <span style={{ color: '#60a5fa' }}>✦ Mejor 3°</span>
               </div>
-            </div>
-          )}
+
+              {/* Best 3rd summary */}
+              {best3rdTeams.length > 0 && (
+                <div
+                  className='mt-4 rounded-xl p-3'
+                  style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+                >
+                  <h3 className='text-xs font-semibold mb-2' style={{ color: 'var(--color-text-muted)' }}>
+                    Mejores Terceros ({best3rdTeams.length}/8 clasificados)
+                  </h3>
+                  <div className='space-y-1'>
+                    {best3rdTeams.map((t, i) => (
+                      <div key={tlaLabel(t.tla)} className='flex items-center gap-2 text-xs'>
+                        <span style={{ color: 'var(--color-text-muted)', width: '16px' }}>{i + 1}.</span>
+                        {t.flag && (
+                          <img
+                            src={`https://flagcdn.com/w80/${t.flag}.png`}
+                            className='w-5 h-3.5 object-cover rounded'
+                          />
+                        )}
+                        <span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{tlaLabel(t.tla)}</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>(Grupo {t.fromGroup})</span>
+                        <span
+                          className='ml-auto font-bold'
+                          style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+                        >
+                          {t.pts} pts
+                        </span>
+                      </div>
+                    ))}
+                    {Array.from({ length: Math.max(0, 8 - best3rdTeams.length) }).map((_, i) => (
+                      <div key={`empty-${i}`} className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+                        {best3rdTeams.length + i + 1}. — (ingresa más resultados)
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             {/* end right column */}
           </div>
@@ -1507,182 +1524,10 @@ export default function TournamentPage() {
             </div>
             {/* Match cards — top on phone, left on desktop */}
             <div className='order-1 w-full md:max-w-md md:shrink-0'>
-          {/* R32 */}
-          {knockoutRound === 'roundOf32' && (
-            <>
-              {predictedGroupMatches < totalGroupMatches && (
-                <div
-                  className='mb-3 rounded-lg p-3 text-xs text-center'
-                  style={{
-                    background: 'rgba(212,168,67,0.08)',
-                    border: '1px solid rgba(212,168,67,0.3)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  Completa todos los partidos de grupos para ver los equipos clasificados. ({predictedGroupMatches}/
-                  {totalGroupMatches} predichos)
-                </div>
-              )}
-              {BRACKET_R32.map((def, idx) => {
-                const teams = getR32Teams(def, groupStandings, best3rdTeams);
-                return (
-                  <KnockoutMatchCard
-                    key={def.id}
-                    matchId={def.id}
-                    home={teams.home}
-                    homeSlot={def.home}
-                    away={teams.away}
-                    awaySlot={def.away}
-                    scoreA={ksScore(def.id, 'A')}
-                    scoreB={ksScore(def.id, 'B')}
-                    effectiveWinner={effectivePicks[def.id]}
-                    tiebreakerPick={picks[def.id]}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.roundOf32[idx]?.date}
-                    matchNo={def.match}
-                    saving={savingMatch[def.id] || false}
-                    onShowBets={openBets}
-                  />
-                );
-              })}
-            </>
-          )}
-
-          {/* R16 */}
-          {knockoutRound === 'roundOf16' && (
-            <>
-              {!isRoundComplete(BRACKET_R32, effectivePicks) && (
-                <div
-                  className='mb-3 rounded-lg p-3 text-xs text-center'
-                  style={{
-                    background: 'rgba(212,168,67,0.08)',
-                    border: '1px solid rgba(212,168,67,0.3)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  Completa la Ronda de 32 para ver los equipos en Octavos.
-                </div>
-              )}
-              {BRACKET_R16.map((def, idx) => {
-                const { home, away } = getKOTeams(def);
-                return (
-                  <KnockoutMatchCard
-                    key={def.id}
-                    matchId={def.id}
-                    home={home}
-                    homeSlot={null}
-                    away={away}
-                    awaySlot={null}
-                    scoreA={ksScore(def.id, 'A')}
-                    scoreB={ksScore(def.id, 'B')}
-                    effectiveWinner={effectivePicks[def.id]}
-                    tiebreakerPick={picks[def.id]}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.roundOf16[idx]?.date}
-                    matchNo={def.match}
-                    saving={savingMatch[def.id] || false}
-                    onShowBets={openBets}
-                  />
-                );
-              })}
-            </>
-          )}
-
-          {/* Quarterfinals */}
-          {knockoutRound === 'quarterfinals' && (
-            <>
-              {!isRoundComplete(BRACKET_R16, effectivePicks) && (
-                <div
-                  className='mb-3 rounded-lg p-3 text-xs text-center'
-                  style={{
-                    background: 'rgba(212,168,67,0.08)',
-                    border: '1px solid rgba(212,168,67,0.3)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  Completa Octavos para ver los Cuartos de Final.
-                </div>
-              )}
-              {BRACKET_QF.map((def, idx) => {
-                const { home, away } = getKOTeams(def);
-                return (
-                  <KnockoutMatchCard
-                    key={def.id}
-                    matchId={def.id}
-                    home={home}
-                    homeSlot={null}
-                    away={away}
-                    awaySlot={null}
-                    scoreA={ksScore(def.id, 'A')}
-                    scoreB={ksScore(def.id, 'B')}
-                    effectiveWinner={effectivePicks[def.id]}
-                    tiebreakerPick={picks[def.id]}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.quarterfinals[idx]?.date}
-                    matchNo={def.match}
-                    saving={savingMatch[def.id] || false}
-                    onShowBets={openBets}
-                  />
-                );
-              })}
-            </>
-          )}
-
-          {/* Semifinals */}
-          {knockoutRound === 'semifinals' && (
-            <>
-              {!isRoundComplete(BRACKET_QF, effectivePicks) && (
-                <div
-                  className='mb-3 rounded-lg p-3 text-xs text-center'
-                  style={{
-                    background: 'rgba(212,168,67,0.08)',
-                    border: '1px solid rgba(212,168,67,0.3)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  Completa Cuartos para ver las Semifinales.
-                </div>
-              )}
-              {BRACKET_SF.map((def, idx) => {
-                const { home, away } = getKOTeams(def);
-                return (
-                  <KnockoutMatchCard
-                    key={def.id}
-                    matchId={def.id}
-                    home={home}
-                    homeSlot={null}
-                    away={away}
-                    awaySlot={null}
-                    scoreA={ksScore(def.id, 'A')}
-                    scoreB={ksScore(def.id, 'B')}
-                    effectiveWinner={effectivePicks[def.id]}
-                    tiebreakerPick={picks[def.id]}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.semifinals[idx]?.date}
-                    matchNo={def.match}
-                    saving={savingMatch[def.id] || false}
-                    onShowBets={openBets}
-                  />
-                );
-              })}
-            </>
-          )}
-
-          {/* 3rd place */}
-          {knockoutRound === 'thirdPlace' &&
-            (() => {
-              const { home, away } = get3rdTeams();
-              return (
+              {/* R32 */}
+              {knockoutRound === 'roundOf32' && (
                 <>
-                  {!isRoundComplete(BRACKET_SF, effectivePicks) && (
+                  {predictedGroupMatches < totalGroupMatches && (
                     <div
                       className='mb-3 rounded-lg p-3 text-xs text-center'
                       style={{
@@ -1691,41 +1536,41 @@ export default function TournamentPage() {
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      Completa las Semifinales para ver el Tercer Puesto.
+                      Completa todos los partidos de grupos para ver los equipos clasificados. ({predictedGroupMatches}/
+                      {totalGroupMatches} predichos)
                     </div>
                   )}
-                  <KnockoutMatchCard
-                    matchId='3rd'
-                    home={home}
-                    homeSlot={null}
-                    away={away}
-                    awaySlot={null}
-                    scoreA={ksScore('3rd', 'A')}
-                    scoreB={ksScore('3rd', 'B')}
-                    effectiveWinner={effectivePicks['3rd']}
-                    tiebreakerPick={picks['3rd']}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.thirdPlace[0]?.date}
-                    matchNo={BRACKET_3RD.match}
-                    saving={savingMatch['3rd'] || false}
-                    onShowBets={openBets}
-                  />
+                  {BRACKET_R32.map((def, idx) => {
+                    const teams = getR32Teams(def, groupStandings, best3rdTeams);
+                    return (
+                      <KnockoutMatchCard
+                        key={def.id}
+                        matchId={def.id}
+                        home={teams.home}
+                        homeSlot={def.home}
+                        away={teams.away}
+                        awaySlot={def.away}
+                        scoreA={ksScore(def.id, 'A')}
+                        scoreB={ksScore(def.id, 'B')}
+                        effectiveWinner={effectivePicks[def.id]}
+                        tiebreakerPick={picks[def.id]}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.roundOf32[idx]?.date}
+                        matchNo={def.match}
+                        saving={savingMatch[def.id] || false}
+                        onShowBets={openBets}
+                      />
+                    );
+                  })}
                 </>
-              );
-            })()}
+              )}
 
-          {/* Final */}
-          {knockoutRound === 'final' &&
-            (() => {
-              const homeTla = effectivePicks['sf_1'];
-              const awayTla = effectivePicks['sf_2'];
-              const home = homeTla ? teamsByTla[homeTla] || { tla: homeTla, name: homeTla, flag: null } : null;
-              const away = awayTla ? teamsByTla[awayTla] || { tla: awayTla, name: awayTla, flag: null } : null;
-              return (
+              {/* R16 */}
+              {knockoutRound === 'roundOf16' && (
                 <>
-                  {!isRoundComplete(BRACKET_SF, effectivePicks) && (
+                  {!isRoundComplete(BRACKET_R32, effectivePicks) && (
                     <div
                       className='mb-3 rounded-lg p-3 text-xs text-center'
                       style={{
@@ -1734,30 +1579,202 @@ export default function TournamentPage() {
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      Completa las Semifinales para ver la Final.
+                      Completa la Ronda de 32 para ver los equipos en Octavos.
                     </div>
                   )}
-                  <KnockoutMatchCard
-                    matchId='final'
-                    home={home}
-                    homeSlot={null}
-                    away={away}
-                    awaySlot={null}
-                    scoreA={ksScore('final', 'A')}
-                    scoreB={ksScore('final', 'B')}
-                    effectiveWinner={effectivePicks['final']}
-                    tiebreakerPick={picks['final']}
-                    onPick={handleBracketPick}
-                    onScoreChange={handleKnockoutScoreChange}
-                    locked={tournamentLocked}
-                    matchDate={koByStage.final[0]?.date}
-                    matchNo={BRACKET_FINAL.match}
-                    saving={savingMatch['final'] || false}
-                    onShowBets={openBets}
-                  />
+                  {BRACKET_R16.map((def, idx) => {
+                    const { home, away } = getKOTeams(def);
+                    return (
+                      <KnockoutMatchCard
+                        key={def.id}
+                        matchId={def.id}
+                        home={home}
+                        homeSlot={null}
+                        away={away}
+                        awaySlot={null}
+                        scoreA={ksScore(def.id, 'A')}
+                        scoreB={ksScore(def.id, 'B')}
+                        effectiveWinner={effectivePicks[def.id]}
+                        tiebreakerPick={picks[def.id]}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.roundOf16[idx]?.date}
+                        matchNo={def.match}
+                        saving={savingMatch[def.id] || false}
+                        onShowBets={openBets}
+                      />
+                    );
+                  })}
                 </>
-              );
-            })()}
+              )}
+
+              {/* Quarterfinals */}
+              {knockoutRound === 'quarterfinals' && (
+                <>
+                  {!isRoundComplete(BRACKET_R16, effectivePicks) && (
+                    <div
+                      className='mb-3 rounded-lg p-3 text-xs text-center'
+                      style={{
+                        background: 'rgba(212,168,67,0.08)',
+                        border: '1px solid rgba(212,168,67,0.3)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      Completa Octavos para ver los Cuartos de Final.
+                    </div>
+                  )}
+                  {BRACKET_QF.map((def, idx) => {
+                    const { home, away } = getKOTeams(def);
+                    return (
+                      <KnockoutMatchCard
+                        key={def.id}
+                        matchId={def.id}
+                        home={home}
+                        homeSlot={null}
+                        away={away}
+                        awaySlot={null}
+                        scoreA={ksScore(def.id, 'A')}
+                        scoreB={ksScore(def.id, 'B')}
+                        effectiveWinner={effectivePicks[def.id]}
+                        tiebreakerPick={picks[def.id]}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.quarterfinals[idx]?.date}
+                        matchNo={def.match}
+                        saving={savingMatch[def.id] || false}
+                        onShowBets={openBets}
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Semifinals */}
+              {knockoutRound === 'semifinals' && (
+                <>
+                  {!isRoundComplete(BRACKET_QF, effectivePicks) && (
+                    <div
+                      className='mb-3 rounded-lg p-3 text-xs text-center'
+                      style={{
+                        background: 'rgba(212,168,67,0.08)',
+                        border: '1px solid rgba(212,168,67,0.3)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      Completa Cuartos para ver las Semifinales.
+                    </div>
+                  )}
+                  {BRACKET_SF.map((def, idx) => {
+                    const { home, away } = getKOTeams(def);
+                    return (
+                      <KnockoutMatchCard
+                        key={def.id}
+                        matchId={def.id}
+                        home={home}
+                        homeSlot={null}
+                        away={away}
+                        awaySlot={null}
+                        scoreA={ksScore(def.id, 'A')}
+                        scoreB={ksScore(def.id, 'B')}
+                        effectiveWinner={effectivePicks[def.id]}
+                        tiebreakerPick={picks[def.id]}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.semifinals[idx]?.date}
+                        matchNo={def.match}
+                        saving={savingMatch[def.id] || false}
+                        onShowBets={openBets}
+                      />
+                    );
+                  })}
+                </>
+              )}
+
+              {/* 3rd place */}
+              {knockoutRound === 'thirdPlace' &&
+                (() => {
+                  const { home, away } = get3rdTeams();
+                  return (
+                    <>
+                      {!isRoundComplete(BRACKET_SF, effectivePicks) && (
+                        <div
+                          className='mb-3 rounded-lg p-3 text-xs text-center'
+                          style={{
+                            background: 'rgba(212,168,67,0.08)',
+                            border: '1px solid rgba(212,168,67,0.3)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          Completa las Semifinales para ver el Tercer Puesto.
+                        </div>
+                      )}
+                      <KnockoutMatchCard
+                        matchId='3rd'
+                        home={home}
+                        homeSlot={null}
+                        away={away}
+                        awaySlot={null}
+                        scoreA={ksScore('3rd', 'A')}
+                        scoreB={ksScore('3rd', 'B')}
+                        effectiveWinner={effectivePicks['3rd']}
+                        tiebreakerPick={picks['3rd']}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.thirdPlace[0]?.date}
+                        matchNo={BRACKET_3RD.match}
+                        saving={savingMatch['3rd'] || false}
+                        onShowBets={openBets}
+                      />
+                    </>
+                  );
+                })()}
+
+              {/* Final */}
+              {knockoutRound === 'final' &&
+                (() => {
+                  const homeTla = effectivePicks['sf_1'];
+                  const awayTla = effectivePicks['sf_2'];
+                  const home = homeTla ? teamsByTla[homeTla] || { tla: homeTla, name: homeTla, flag: null } : null;
+                  const away = awayTla ? teamsByTla[awayTla] || { tla: awayTla, name: awayTla, flag: null } : null;
+                  return (
+                    <>
+                      {!isRoundComplete(BRACKET_SF, effectivePicks) && (
+                        <div
+                          className='mb-3 rounded-lg p-3 text-xs text-center'
+                          style={{
+                            background: 'rgba(212,168,67,0.08)',
+                            border: '1px solid rgba(212,168,67,0.3)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          Completa las Semifinales para ver la Final.
+                        </div>
+                      )}
+                      <KnockoutMatchCard
+                        matchId='final'
+                        home={home}
+                        homeSlot={null}
+                        away={away}
+                        awaySlot={null}
+                        scoreA={ksScore('final', 'A')}
+                        scoreB={ksScore('final', 'B')}
+                        effectiveWinner={effectivePicks['final']}
+                        tiebreakerPick={picks['final']}
+                        onPick={handleBracketPick}
+                        onScoreChange={handleKnockoutScoreChange}
+                        locked={tournamentLocked}
+                        matchDate={koByStage.final[0]?.date}
+                        matchNo={BRACKET_FINAL.match}
+                        saving={savingMatch['final'] || false}
+                        onShowBets={openBets}
+                      />
+                    </>
+                  );
+                })()}
             </div>
             {/* end match cards column */}
           </div>
