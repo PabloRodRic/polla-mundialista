@@ -4,10 +4,27 @@ import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { compareLeaderboard } from '../services/matchSync';
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+// Only the top 2 win prize money, so only they get a medal.
+const MEDALS = ['🥇', '🥈'];
+
+// Two players are tied when they have the same points AND the same number of exact
+// scorelines (the tiebreaker). Names don't break a tie — genuinely-tied players share a rank.
+function isTied(a, b) {
+  return (a.totalPoints || 0) === (b.totalPoints || 0) && (a.exactScores || 0) === (b.exactScores || 0);
+}
+
+// Standard competition ranking ("1-2-2-2-5"): tied players share the lowest rank in
+// their group, and the next distinct player skips ahead by the group size.
+// `players` must already be sorted with compareLeaderboard.
+function computeRanks(players) {
+  return players.map((p, i) => (i > 0 && isTied(p, players[i - 1]) ? null : i + 1)).reduce((ranks, r, i) => {
+    ranks.push(r ?? ranks[i - 1]);
+    return ranks;
+  }, []);
+}
 
 function RankBadge({ rank }) {
-  if (rank <= 3) {
+  if (rank <= MEDALS.length) {
     return <span className='text-xl w-8 text-center'>{MEDALS[rank - 1]}</span>;
   }
   return (
@@ -154,7 +171,9 @@ export default function LeaderboardPage() {
     return unsub;
   }, []);
 
-  const currentUserRank = players.findIndex((p) => p.id === user?.uid) + 1;
+  const ranks = computeRanks(players);
+  const currentUserIndex = players.findIndex((p) => p.id === user?.uid);
+  const currentUserRank = currentUserIndex >= 0 ? ranks[currentUserIndex] : 0;
 
   return (
     <div className='max-w-lg mx-auto px-4 pt-4'>
@@ -181,7 +200,7 @@ export default function LeaderboardPage() {
         </div>
       ) : (
         players.map((player, i) => {
-          const currentRank = i + 1;
+          const currentRank = ranks[i];
           const prevRank = rankSnapshot[player.id];
           const change = prevRank != null ? prevRank - currentRank : null;
           return (
