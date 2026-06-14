@@ -23,6 +23,7 @@ import {
   calculateLivePoints,
   resetPointsForMatch,
   calculateAwardPoints,
+  recalculateAllUsers,
   getSyncStatus,
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
@@ -637,6 +638,7 @@ export default function AdminPage() {
   const [toast, setToast] = useState(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   // Per-match "who has/hasn't submitted their prediction" popup
   const [statusModal, setStatusModal] = useState({ open: false, title: '' });
@@ -724,6 +726,18 @@ export default function AdminPage() {
     }
   }
 
+  async function handleRecalculate() {
+    setRecalculating(true);
+    try {
+      const count = await recalculateAllUsers();
+      showToast(`Puntajes recalculados (${count} usuarios)`);
+    } catch (err) {
+      showToast(`Error al recalcular: ${err.message}`, 'error');
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
   function handleToggleAuto() {
     if (autoPaused) {
       startAutoSync(true);
@@ -801,6 +815,21 @@ export default function AdminPage() {
         }}
       >
         {syncing || syncStatus.syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar Partidos Ahora'}
+      </button>
+
+      {/* Recalculate all users' points & breakdown */}
+      <button
+        onClick={handleRecalculate}
+        disabled={recalculating}
+        className='w-full py-2.5 rounded-xl font-medium mb-4 text-sm transition-opacity'
+        style={{
+          background: 'var(--color-surface-card)',
+          color: 'var(--color-text-secondary)',
+          border: '1px solid var(--color-border)',
+          opacity: recalculating ? 0.7 : 1,
+        }}
+      >
+        {recalculating ? '⏳ Recalculando...' : '🧮 Recalcular Puntajes'}
       </button>
 
       {/* [TEMP] Clear all overrides */}

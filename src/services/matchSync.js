@@ -117,6 +117,22 @@ function isExactScore(predA, predB, realA, realB) {
   return Number(predA) === Number(realA) && Number(predB) === Number(realB);
 }
 
+// Classify a prediction into the (mutually exclusive) hit tier, independent of how
+// many points the stage awards. Used for the per-user leaderboard breakdown:
+//   3 = exact scoreline · 2 = right outcome + goal difference · 1 = right outcome · 0 = miss
+function resultTier(predA, predB, realA, realB) {
+  const pA = Number(predA);
+  const pB = Number(predB);
+  const rA = Number(realA);
+  const rB = Number(realB);
+  if ([pA, pB, rA, rB].some((n) => isNaN(n))) return 0;
+  if (pA === rA && pB === rB) return 3;
+  const sameOutcome = Math.sign(pA - pB) === Math.sign(rA - rB);
+  if (!sameOutcome) return 0;
+  if (Math.abs(pA - pB) === Math.abs(rA - rB)) return 2;
+  return 1;
+}
+
 // Leaderboard order: most points, then most exact scorelines, then name (stable).
 export function compareLeaderboard(a, b) {
   return (
@@ -289,7 +305,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
       stage,
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
-    batch.update(predDoc.ref, { pointsEarned: points, isExact, calculatedAt: Timestamp.now() });
+    const tier = resultTier(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
+    batch.update(predDoc.ref, { pointsEarned: points, isExact, resultTier: tier, calculatedAt: Timestamp.now() });
     affectedUserIds.add(pred.userId);
   });
 
@@ -305,7 +322,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
       stage,
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
-    batch.update(predDoc.ref, { pointsEarned: points, isExact, calculatedAt: Timestamp.now() });
+    const tier = resultTier(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
+    batch.update(predDoc.ref, { pointsEarned: points, isExact, resultTier: tier, calculatedAt: Timestamp.now() });
     affectedUserIds.add(pred.userId);
   });
 
@@ -324,7 +342,8 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
         true, // isPreTournament: use scaled scoring per round
       );
       const isExact = isExactScore(predA, predB, scoreA, scoreB);
-      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points, [`kse_${matchId}`]: isExact });
+      const tier = resultTier(predA, predB, scoreA, scoreB);
+      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points, [`kse_${matchId}`]: isExact, [`kst_${matchId}`]: tier });
       if (data.userId) affectedUserIds.add(data.userId);
     }
   });
@@ -414,9 +433,7 @@ async function calculateGroupStandingsPoints(group) {
   await setDoc(scoreStateRef, { [`gsp_${group}_done`]: true }, { merge: true });
   await batch.commit();
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 
   // Once all 12 groups are done, score best-3rd place R32 advancement
   await calculateBest3rdAdvancementIfReady();
@@ -516,9 +533,7 @@ async function calculateBest3rdAdvancementIfReady() {
   await setDoc(scoreStateRef, { best3rd_done: true }, { merge: true });
   await batch.commit();
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }
 
 // Team advancement scoring — called when a knockout match finishes
@@ -546,9 +561,7 @@ async function calculateAdvancementPoints(winnerTla, stage) {
 
   await batch.commit();
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }
 
 // Tournament outcome scoring — called after final or 3rd place finishes
@@ -612,9 +625,7 @@ async function calculateTournamentOutcomePoints() {
 
   await batch.commit();
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }
 
 // Final scoring when a match finishes — no guard so admin overrides can be re-run
@@ -630,7 +641,7 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   const affectedUserIds = new Set();
   const resetBatch = writeBatch(db);
   groupPredsSnap.forEach((predDoc) => {
-    resetBatch.update(predDoc.ref, { pointsEarned: 0, isExact: false });
+    resetBatch.update(predDoc.ref, { pointsEarned: 0, isExact: false, resultTier: 0 });
     affectedUserIds.add(predDoc.data().userId);
   });
   await resetBatch.commit();
@@ -650,9 +661,7 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   });
   await setDoc(doc(db, 'leaderboard', 'rankSnapshot'), rankSnapshot);
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 
   // Group final standings scoring — triggers when all 6 matches in a group finish
   if (stage === 'group' && matchData?.group) {
@@ -676,9 +685,7 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
 // Live scoring — recalculates every sync, no guard, no rank snapshot, no flag
 export async function calculateLivePoints(matchId, scoreA, scoreB, stage) {
   const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage);
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }
 
 export async function resetPointsForMatch(matchId) {
@@ -697,7 +704,7 @@ export async function resetPointsForMatch(matchId) {
   // 2. Zero out predictions — each collection updated independently so one failure doesn't block others
   const predsSnap = await getDocs(query(collection(db, 'predictions'), where('matchId', '==', String(matchId))));
   for (const predDoc of predsSnap.docs) {
-    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false });
+    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false, resultTier: 0 });
     affectedUserIds.add(predDoc.data().userId);
   }
 
@@ -705,7 +712,7 @@ export async function resetPointsForMatch(matchId) {
     query(collection(db, 'preTournamentGroupPredictions'), where('matchId', '==', String(matchId))),
   );
   for (const predDoc of groupPredsSnap.docs) {
-    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false });
+    await updateDoc(predDoc.ref, { pointsEarned: 0, isExact: false, resultTier: 0 });
     affectedUserIds.add(predDoc.data().userId);
   }
 
@@ -713,26 +720,78 @@ export async function resetPointsForMatch(matchId) {
   for (const bracketDoc of bracketSnap.docs) {
     const data = bracketDoc.data();
     if (`ksp_${matchId}` in data) {
-      await updateDoc(bracketDoc.ref, { [`ksp_${matchId}`]: 0, [`kse_${matchId}`]: false });
+      await updateDoc(bracketDoc.ref, { [`ksp_${matchId}`]: 0, [`kse_${matchId}`]: false, [`kst_${matchId}`]: 0 });
       if (data.userId) affectedUserIds.add(data.userId);
     }
   }
 
   // 3. Recalculate totals for every affected user
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }
 
-async function recalculateTotalPoints(userId) {
+// Load every match that has a usable score (live or finished), keyed by string
+// matchId → { scoreA, scoreB }. Shared across a recalc batch so we don't refetch
+// the matches collection once per user.
+async function loadMatchResults() {
+  const snap = await getDocs(collection(db, 'matches'));
+  const results = {};
+  snap.forEach((d) => {
+    const m = d.data();
+    if (m.scoreA != null && m.scoreB != null) {
+      results[d.id] = { scoreA: m.scoreA, scoreB: m.scoreB };
+    }
+  });
+  return results;
+}
+
+// Recalculate one or many users in parallel. Loads match results once up front
+// (instead of per user) so a single sync doesn't fan out into N serial refetches.
+async function recalcUsers(userIds, matchResults) {
+  const ids = [...userIds];
+  if (ids.length === 0) return;
+  const results = matchResults || (await loadMatchResults());
+  await Promise.all(ids.map((uid) => recalculateTotalPoints(uid, results)));
+}
+
+// Recompute every user's totals and breakdown from scratch. Exposed for the admin
+// "Recalcular puntajes" action — also backfills the correctos/DG counts onto users
+// whose matches were scored before those fields existed.
+export async function recalculateAllUsers() {
+  const matchResults = await loadMatchResults();
+  const usersSnap = await getDocs(collection(db, 'users'));
+  const ids = usersSnap.docs.map((d) => d.id);
+  await recalcUsers(ids, matchResults);
+  return ids.length;
+}
+
+async function recalculateTotalPoints(userId, matchResults) {
+  const results = matchResults || (await loadMatchResults());
+
   let total = 0;
-  let exactScores = 0; // count of exact-scoreline hits — leaderboard tiebreaker
+  // Per-user hit breakdown (mutually exclusive tiers), shown on the leaderboard.
+  // exactScores doubles as the leaderboard tiebreaker. The breakdown is recomputed
+  // directly from the real match results so it can never drift from totalPoints and
+  // self-heals for predictions scored before these fields existed.
+  let correctScores = 0; // right outcome only
+  let goalDiffScores = 0; // right outcome + goal difference
+  let exactScores = 0; // exact scoreline
+
+  // Classify one score prediction against its match's real result (if scored yet).
+  function tallyPrediction(matchId, predA, predB) {
+    const real = results[String(matchId)];
+    if (!real) return;
+    const t = resultTier(predA, predB, real.scoreA, real.scoreB);
+    if (t === 3) exactScores++;
+    else if (t === 2) goalDiffScores++;
+    else if (t === 1) correctScores++;
+  }
 
   // Live knockout predictions
   const predsSnap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', userId)));
   predsSnap.forEach((d) => {
-    total += d.data().pointsEarned || 0;
-    if (d.data().isExact) exactScores++;
+    const p = d.data();
+    total += p.pointsEarned || 0;
+    tallyPrediction(p.matchId, p.predictedScoreA, p.predictedScoreB);
   });
 
   // Group stage predictions
@@ -740,25 +799,38 @@ async function recalculateTotalPoints(userId) {
     query(collection(db, 'preTournamentGroupPredictions'), where('userId', '==', userId)),
   );
   groupPredsSnap.forEach((d) => {
-    total += d.data().pointsEarned || 0;
-    if (d.data().isExact) exactScores++;
+    const p = d.data();
+    total += p.pointsEarned || 0;
+    tallyPrediction(p.matchId, p.predictedScoreA, p.predictedScoreB);
   });
 
-  // Bracket doc: all scored fields
+  // Bracket doc: all scored fields. Bracket knockout-score hits are keyed by slot,
+  // not real match id, so they keep using the stored kst_/kse_ tier flags.
   const bracketSnap = await getDoc(doc(db, 'preTournamentBracket', userId));
   if (bracketSnap.exists()) {
     const data = bracketSnap.data();
     for (const [key, val] of Object.entries(data)) {
-      if (key.startsWith('ksp_')) total += val || 0; // bracket knockout scores (scaled)
+      if (key.startsWith('ksp_')) {
+        total += val || 0; // bracket knockout scores (scaled)
+        const matchId = key.slice(4);
+        const tier = data[`kst_${matchId}`] ?? (data[`kse_${matchId}`] ? 3 : 0);
+        if (tier === 3) exactScores++;
+        else if (tier === 2) goalDiffScores++;
+        else if (tier === 1) correctScores++;
+      }
       if (key.startsWith('gsp_')) total += val || 0; // group final standings
       if (key.startsWith('adv_')) total += val || 0; // team advancement
-      if (key.startsWith('kse_') && val) exactScores++; // bracket exact scorelines
     }
     total += data.tournamentOutcomePoints || 0; // champion / runner-up / 3rd place
     total += data.awardPoints || 0; // golden boot / golden ball
   }
 
-  await updateDoc(doc(db, 'users', userId), { totalPoints: total, exactScores });
+  await updateDoc(doc(db, 'users', userId), {
+    totalPoints: total,
+    exactScores,
+    goalDiffScores,
+    correctScores,
+  });
 }
 
 // Normalizes player names for comparison: lowercase, trimmed, accents stripped
@@ -811,7 +883,5 @@ export async function calculateAwardPoints(goldenBoot, goldenBall, babyGender = 
 
   await batch.commit();
 
-  for (const userId of affectedUserIds) {
-    await recalculateTotalPoints(userId);
-  }
+  await recalcUsers(affectedUserIds);
 }

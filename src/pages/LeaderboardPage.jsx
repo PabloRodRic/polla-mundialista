@@ -64,7 +64,7 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
         </div>
       )}
 
-      {/* Name */}
+      {/* Name + hit breakdown */}
       <div className='flex-1 min-w-0'>
         <p
           className='font-semibold text-sm truncate'
@@ -76,6 +76,20 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
               (tú)
             </span>
           )}
+        </p>
+        <p className='text-xs mt-0.5 flex items-center gap-1.5' style={{ color: 'var(--color-text-muted)' }}>
+          <span>
+            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.correctScores ?? 0}</span>{' '}
+            correctos
+          </span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>
+            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.goalDiffScores ?? 0}</span> DG
+          </span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>
+            <span style={{ color: 'var(--color-gold)', fontWeight: 600 }}>{entry.exactScores ?? 0}</span> exactos
+          </span>
         </p>
       </div>
 
