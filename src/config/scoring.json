@@ -57,7 +57,7 @@
   },
 
   "scoreSync": {
-    "pollIntervalMatchDayMinutes": 5,
+    "pollIntervalMatchDayMinutes": 2,
     "pollIntervalOffDayMinutes": 60
   }
 }
