@@ -628,11 +628,58 @@ async function calculateTournamentOutcomePoints() {
   await recalcUsers(affectedUserIds);
 }
 
+// Tie-aware ranks (standard competition ranking): players with the same points AND
+// the same exact-score count share a rank, matching the leaderboard's own logic.
+// Returns { userId: rank }.
+function rankUsersWithTies(users) {
+  const sorted = [...users].sort(compareLeaderboard);
+  const ranks = {};
+  sorted.forEach((u, i) => {
+    if (i > 0) {
+      const prev = sorted[i - 1];
+      const tied =
+        (u.totalPoints || 0) === (prev.totalPoints || 0) && (u.exactScores || 0) === (prev.exactScores || 0);
+      ranks[u.id] = tied ? ranks[prev.id] : i + 1;
+    } else {
+      ranks[u.id] = 1;
+    }
+  });
+  return ranks;
+}
+
+// Recompute the leaderboard "position movement" arrows. Called only when a match
+// genuinely finishes for the first time — never on live updates, admin re-runs of an
+// already-scored match, or full recalculations — so the arrows reflect the movement
+// caused by the latest completed match and stay stable in between.
+//
+// Stored at leaderboard/rankSnapshot as:
+//   { ranks:  { userId: rankNow },              ← baseline for the next match
+//     change: { userId: prevRank - rankNow } }  ← what the UI renders (positive = up)
+async function updateRankMovement() {
+  const usersSnap = await getDocs(collection(db, 'users'));
+  const users = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const newRanks = rankUsersWithTies(users);
+
+  const prevDoc = await getDoc(doc(db, 'leaderboard', 'rankSnapshot'));
+  const prevRanks = prevDoc.exists() ? prevDoc.data().ranks || {} : {};
+
+  const change = {};
+  for (const [uid, rank] of Object.entries(newRanks)) {
+    const prev = prevRanks[uid];
+    change[uid] = prev != null ? prev - rank : 0; // positive = moved up since last match
+  }
+
+  await setDoc(doc(db, 'leaderboard', 'rankSnapshot'), { ranks: newRanks, change, updatedAt: Date.now() });
+}
+
 // Final scoring when a match finishes — no guard so admin overrides can be re-run
 export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   const matchRef = doc(db, 'matches', String(matchId));
   const matchSnap = await getDoc(matchRef);
   const matchData = matchSnap.data();
+  // A genuine first-time finish (vs. an admin re-save/override of an already-scored
+  // match) is the only thing that should move the leaderboard arrows.
+  const wasAlreadyScored = matchData?.pointsCalculated === true;
 
   // Reset points for all predictions on this match before recalculating
   const groupPredsSnap = await getDocs(
@@ -650,16 +697,6 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   for (const uid of recalcUserIds) affectedUserIds.add(uid);
 
   await updateDoc(matchRef, { pointsCalculated: true });
-
-  // Snapshot ranks before recalculating so UI can show position movement.
-  // Sort with the same tiebreaker the leaderboard uses (points → exact scores → name).
-  const usersSnap = await getDocs(collection(db, 'users'));
-  const ranked = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(compareLeaderboard);
-  const rankSnapshot = {};
-  ranked.forEach((u, i) => {
-    rankSnapshot[u.id] = i + 1;
-  });
-  await setDoc(doc(db, 'leaderboard', 'rankSnapshot'), rankSnapshot);
 
   await recalcUsers(affectedUserIds);
 
@@ -679,6 +716,12 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   // Tournament outcome scoring — requires both final and 3rd place to be finished
   if (stage === 'final' || stage === 'thirdPlace') {
     await calculateTournamentOutcomePoints();
+  }
+
+  // Refresh the leaderboard movement arrows once all cascading scoring is done, but
+  // only for a genuine first-time finish so re-saves/overrides don't reshuffle them.
+  if (!wasAlreadyScored) {
+    await updateRankMovement();
   }
 }
 

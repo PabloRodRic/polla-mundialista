@@ -6,7 +6,19 @@ import { tlaLabel } from '../utils/teamLabels';
 //                         user's teams differ, so the pick is the clear part).
 // type 'award'          → rows show a free-text value (golden boot/ball/gender).
 // type 'outcome'        → rows show a team (flag + TLA) for champion/2nd/3rd.
-export default function OthersBetsModal({ open, onClose, title, type, bets, loading, currentUserId }) {
+// For 'group'/'live', pass the fixed match flags (homeFlag/awayFlag) to render
+// flags around the scoreline so the favored side is obvious.
+export default function OthersBetsModal({
+  open,
+  onClose,
+  title,
+  type,
+  bets,
+  loading,
+  currentUserId,
+  homeFlag,
+  awayFlag,
+}) {
   if (!open) return null;
 
   return (
@@ -16,7 +28,7 @@ export default function OthersBetsModal({ open, onClose, title, type, bets, load
       onClick={onClose}
     >
       <div
-        className='relative w-full max-w-sm rounded-3xl p-6 pt-7 max-h-[80vh] flex flex-col'
+        className='relative w-full max-w-sm sm:max-w-lg rounded-3xl p-6 pt-7 max-h-[80vh] flex flex-col'
         style={{
           background: 'var(--color-surface-card)',
           border: '1px solid var(--color-border)',
@@ -79,7 +91,7 @@ export default function OthersBetsModal({ open, onClose, title, type, bets, load
                   </div>
                 );
                 const nameEl = (
-                  <span className='text-sm font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
+                  <span className='text-xs sm:text-sm font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
                     {b.name}
                     {isMe && <span style={{ color: 'var(--color-gold)' }}> (tú)</span>}
                   </span>
@@ -88,6 +100,39 @@ export default function OthersBetsModal({ open, onClose, title, type, bets, load
                   background: isMe ? 'rgba(212,168,67,0.10)' : 'var(--color-surface)',
                   border: `1px solid ${isMe ? 'rgba(212,168,67,0.45)' : 'var(--color-border)'}`,
                 };
+
+                // Group / live with known teams: single-line row — name on the left,
+                // then flags around the score. The favored side (higher score) gets a
+                // gold ring so it's clear who the user gave the advantage to.
+                if ((type === 'group' || type === 'live') && (homeFlag || awayFlag)) {
+                  const homeFavored = hasScore && b.scoreA > b.scoreB;
+                  const awayFavored = hasScore && b.scoreA < b.scoreB;
+                  const flag = (src, favored) =>
+                    src && (
+                      <img
+                        src={`https://flagcdn.com/w40/${src}.png`}
+                        alt=''
+                        className='w-5 h-3.5 object-cover rounded shrink-0'
+                        style={favored ? { boxShadow: '0 0 0 2px var(--color-gold)' } : undefined}
+                      />
+                    );
+                  return (
+                    <li key={b.userId} className='flex items-center gap-2.5 rounded-xl px-2.5 py-2' style={rowStyle}>
+                      {avatar}
+                      {nameEl}
+                      <div className='ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0 text-xs sm:text-sm'>
+                        {flag(homeFlag, homeFavored)}
+                        <span
+                          className='font-bold tabular-nums'
+                          style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+                        >
+                          {hasScore ? `${b.scoreA} – ${b.scoreB}` : 'vs'}
+                        </span>
+                        {flag(awayFlag, awayFavored)}
+                      </div>
+                    </li>
+                  );
+                }
 
                 // Knockout: two-line row — name on top, resolved matchup below.
                 if (type === 'knockout') {

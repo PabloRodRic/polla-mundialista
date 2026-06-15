@@ -28,19 +28,45 @@ import {
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
 import { tlaLabel } from '../utils/teamLabels';
+import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
 import { fetchMatchPredictionStatus, fetchPronosticoCompletion } from '../services/preTournamentService';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 
-function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
+// Collapsible card wrapper — keeps the admin top section compact. Collapsed by default.
+function Accordion({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div
-      className='rounded-xl p-4 mb-4'
+      className='rounded-xl mb-4'
       style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
     >
-      <h2 className='text-xs font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-gold)' }}>
-        Estado del Sync
-      </h2>
+      <button
+        type='button'
+        onClick={() => setOpen((o) => !o)}
+        className='w-full flex items-center justify-between px-4 py-3'
+      >
+        <h2 className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--color-gold)' }}>
+          {title}
+        </h2>
+        <svg
+          className='w-4 h-4 transition-transform shrink-0'
+          style={{ color: 'var(--color-text-muted)', transform: open ? 'rotate(180deg)' : 'none' }}
+          viewBox='0 0 24 24'
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='2'
+        >
+          <path d='M6 9l6 6 6-6' strokeLinecap='round' strokeLinejoin='round' />
+        </svg>
+      </button>
+      {open && <div className='px-4 pb-4'>{children}</div>}
+    </div>
+  );
+}
 
+function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
+  return (
+    <Accordion title='Estado del Sync'>
       <div className='space-y-2 text-sm mb-4'>
         <div className='flex justify-between'>
           <span style={{ color: 'var(--color-text-muted)' }}>API Key</span>
@@ -87,7 +113,7 @@ function StatusCard({ syncStatus, autoPaused, onToggleAuto }) {
           {autoPaused ? '▶ Reanudar Auto-sync' : '⏸ Pausar Auto-sync'}
         </button>
       </div>
-    </div>
+    </Accordion>
   );
 }
 
@@ -395,13 +421,7 @@ function AwardsCard({ onSave }) {
   }
 
   return (
-    <div
-      className='rounded-xl p-4 mb-4'
-      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-    >
-      <h2 className='text-xs font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-gold)' }}>
-        Premios Individuales
-      </h2>
+    <Accordion title='Premios Individuales'>
       <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
         Ingresar ganadores reales para calcular puntos. Ejecutar una vez que FIFA los anuncie.
       </p>
@@ -496,7 +516,7 @@ function AwardsCard({ onSave }) {
           {clearing ? 'Borrando...' : 'Borrar premios (Bota, Balón y bebé)'}
         </button>
       )}
-    </div>
+    </Accordion>
   );
 }
 
@@ -545,14 +565,8 @@ function PronosticoStatusCard() {
   }
 
   return (
-    <div
-      className='rounded-xl p-4 mb-4'
-      style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
-    >
-      <div className='flex items-center justify-between mb-3'>
-        <h2 className='text-xs font-bold uppercase tracking-wider' style={{ color: 'var(--color-gold)' }}>
-          Estado de Pronósticos
-        </h2>
+    <Accordion title='Estado de Pronósticos'>
+      <div className='flex items-center justify-end mb-3'>
         <div className='flex items-center gap-2'>
           {!loading && (
             <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
@@ -624,7 +638,7 @@ function PronosticoStatusCard() {
           ))}
         </ul>
       )}
-    </div>
+    </Accordion>
   );
 }
 
@@ -634,7 +648,7 @@ export default function AdminPage() {
   const [syncStatus, setSyncStatus] = useState(getSyncStatus());
   const [syncing, setSyncing] = useState(false);
   const [autoPaused, setAutoPaused] = useState(false);
-  const [matchFilter, setMatchFilter] = useState('all');
+  const [matchFilter, setMatchFilter] = useState(DEFAULT_TIME_FILTER);
   const [toast, setToast] = useState(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -763,7 +777,7 @@ export default function AdminPage() {
     );
   }
 
-  const filtered = matchFilter === 'all' ? matches : matches.filter((m) => m.status === matchFilter);
+  const filtered = filterMatchesByTime(matches, matchFilter);
 
   return (
     <div className='max-w-lg mx-auto px-4 pt-4'>
@@ -919,12 +933,7 @@ export default function AdminPage() {
       </h2>
 
       <div className='flex gap-2 mb-4 overflow-x-auto pb-1'>
-        {[
-          { value: 'all', label: 'Todos' },
-          { value: 'live', label: 'En Vivo' },
-          { value: 'upcoming', label: 'Próximos' },
-          { value: 'finished', label: 'Finalizados' },
-        ].map((f) => (
+        {TIME_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => setMatchFilter(f.value)}

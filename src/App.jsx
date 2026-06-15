@@ -28,14 +28,14 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to='/pronostico' replace />} />
+        <Route index element={<Navigate to='/partidos' replace />} />
         <Route path='/partidos' element={<MatchesPage />} />
         <Route path='/pronostico' element={<FixturePage />} />
         <Route path='/predicciones' element={<PredictionsPage />} />
         <Route path='/tabla' element={<LeaderboardPage />} />
         <Route path='/reglas' element={<RulesPage />} />
         <Route path='/admin' element={<AdminPage />} />
-        <Route path='*' element={<Navigate to='/pronostico' replace />} />
+        <Route path='*' element={<Navigate to='/partidos' replace />} />
       </Route>
     </Routes>
   );

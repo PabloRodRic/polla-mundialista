@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { useAuth } from '../contexts/AuthContext';
 import { tlaLabel } from '../utils/teamLabels';
+import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
+import { fetchOthersBets } from '../services/preTournamentService';
+import OthersBetsModal from '../components/OthersBetsModal';
+import BetsIconButton from '../components/BetsIconButton';
 
 const STAGE_LABELS = {
   group: 'Fase de Grupos',
@@ -71,7 +76,7 @@ function TeamFlag({ match, side }) {
   return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />;
 }
 
-function MatchCard({ match }) {
+function MatchCard({ match, onShowBets, betsLocked }) {
   return (
     <div
       className='rounded-xl p-4 mb-3'
@@ -86,7 +91,10 @@ function MatchCard({ match }) {
           {match.stage === 'group' ? `Grupo ${match.group} · ` : ''}
           {formatDate(match.date)}
         </span>
-        <StatusBadge status={match.status} />
+        <div className='flex items-center gap-2'>
+          <StatusBadge status={match.status} />
+          <BetsIconButton disabled={!betsLocked} onClick={() => onShowBets(match)} />
+        </div>
       </div>
 
       {/* Teams */}
@@ -169,9 +177,29 @@ function SkeletonCard() {
 }
 
 export default function MatchesPage() {
+  const { user } = useAuth();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(DEFAULT_TIME_FILTER);
+
+  // "Ver pronósticos de otros" popup
+  const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'group' });
+  const [betsData, setBetsData] = useState([]);
+  const [betsLoading, setBetsLoading] = useState(false);
+  const [betsMatch, setBetsMatch] = useState(null);
+
+  function openBets(match) {
+    const type = match.stage === 'group' ? 'group' : 'live';
+    const title = `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`;
+    setBetsModal({ open: true, title, type });
+    setBetsMatch(match);
+    setBetsData([]);
+    setBetsLoading(true);
+    fetchOthersBets(match.id, type)
+      .then(setBetsData)
+      .catch(() => setBetsData([]))
+      .finally(() => setBetsLoading(false));
+  }
 
   useEffect(() => {
     const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
@@ -188,16 +216,18 @@ export default function MatchesPage() {
     return unsub;
   }, []);
 
-  // Collect available groups
-  const groups = [...new Set(matches.filter((m) => m.group).map((m) => m.group))].sort();
+  // Predictions (and therefore others' bets) unlock once the tournament starts —
+  // i.e. the earliest group-stage match has kicked off.
+  const firstGroupMatchDate = matches.reduce((earliest, m) => {
+    if (m.stage !== 'group') return earliest;
+    const d = m.date?.toDate?.();
+    if (!d) return earliest;
+    return !earliest || d < earliest ? d : earliest;
+  }, null);
+  const betsLocked = firstGroupMatchDate ? new Date() >= firstGroupMatchDate : false;
 
-  // Filter matches
-  const filtered =
-    filter === 'all'
-      ? matches
-      : filter === 'knockout'
-        ? matches.filter((m) => m.stage !== 'group')
-        : matches.filter((m) => m.group === filter);
+  // Filter matches by the shared time-based filter (Hoy / Próximos / Finalizados / Todos)
+  const filtered = filterMatchesByTime(matches, filter);
 
   // Group by stage/matchday section
   const sections = [];
@@ -222,13 +252,9 @@ export default function MatchesPage() {
 
       {/* Filter tabs */}
       <div className='flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none'>
-        <FilterTab label='Todos' value='all' current={filter} onClick={setFilter} />
-        {groups.map((g) => (
-          <FilterTab key={g} label={`Grupo ${g}`} value={g} current={filter} onClick={setFilter} />
+        {TIME_FILTERS.map((f) => (
+          <FilterTab key={f.value} label={f.label} value={f.value} current={filter} onClick={setFilter} />
         ))}
-        {matches.some((m) => m.stage !== 'group') && (
-          <FilterTab label='Eliminatorias' value='knockout' current={filter} onClick={setFilter} />
-        )}
       </div>
 
       {loading ? (
@@ -236,8 +262,14 @@ export default function MatchesPage() {
       ) : filtered.length === 0 ? (
         <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
           <p className='text-4xl mb-2'>⚽</p>
-          <p>No hay partidos disponibles.</p>
-          <p className='text-sm mt-1'>Un admin debe sincronizar los datos.</p>
+          {matches.length === 0 ? (
+            <>
+              <p>No hay partidos disponibles.</p>
+              <p className='text-sm mt-1'>Un admin debe sincronizar los datos.</p>
+            </>
+          ) : (
+            <p>No hay partidos en este filtro.</p>
+          )}
         </div>
       ) : (
         sections.map((section) => (
@@ -249,11 +281,23 @@ export default function MatchesPage() {
               {section.key}
             </h2>
             {section.matches.map((m) => (
-              <MatchCard key={m.id} match={m} />
+              <MatchCard key={m.id} match={m} onShowBets={openBets} betsLocked={betsLocked} />
             ))}
           </div>
         ))
       )}
+
+      <OthersBetsModal
+        open={betsModal.open}
+        onClose={() => setBetsModal((s) => ({ ...s, open: false }))}
+        title={betsModal.title}
+        type={betsModal.type}
+        bets={betsData}
+        loading={betsLoading}
+        currentUserId={user?.uid}
+        homeFlag={betsMatch?.flagA}
+        awayFlag={betsMatch?.flagB}
+      />
     </div>
   );
 }

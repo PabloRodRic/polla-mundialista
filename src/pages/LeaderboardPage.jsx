@@ -25,10 +25,10 @@ function computeRanks(players) {
 
 function RankBadge({ rank }) {
   if (rank <= MEDALS.length) {
-    return <span className='text-xl w-8 text-center'>{MEDALS[rank - 1]}</span>;
+    return <span className='text-xl w-6 text-center shrink-0'>{MEDALS[rank - 1]}</span>;
   }
   return (
-    <span className='w-8 text-center text-sm font-bold' style={{ color: 'var(--color-text-muted)' }}>
+    <span className='w-6 text-center text-sm font-bold shrink-0' style={{ color: 'var(--color-text-muted)' }}>
       {rank}
     </span>
   );
@@ -52,7 +52,7 @@ function ChangeIndicator({ change }) {
 function PlayerRow({ entry, rank, isCurrentUser, change }) {
   return (
     <div
-      className='flex items-center gap-3 px-4 py-3 rounded-xl mb-2 transition-colors'
+      className='flex items-center gap-2 px-3 py-3 rounded-xl mb-2 transition-colors'
       style={{
         background: isCurrentUser
           ? 'rgba(212,168,67,0.08)'
@@ -69,12 +69,12 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
         <img
           src={entry.photoURL}
           alt={entry.name}
-          className='w-9 h-9 rounded-full object-cover shrink-0'
+          className='w-8 h-8 rounded-full object-cover shrink-0'
           style={{ border: '2px solid var(--color-border)' }}
         />
       ) : (
         <div
-          className='w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0'
+          className='w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0'
           style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
         >
           {entry.name?.[0] || '?'}
@@ -94,7 +94,10 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
             </span>
           )}
         </p>
-        <p className='text-xs mt-0.5 flex items-center gap-1.5' style={{ color: 'var(--color-text-muted)' }}>
+        <p
+          className='text-[11px] mt-0.5 flex items-center gap-1 whitespace-nowrap'
+          style={{ color: 'var(--color-text-muted)' }}
+        >
           <span>
             <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.correctScores ?? 0}</span>{' '}
             correctos
@@ -114,7 +117,7 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
       <ChangeIndicator change={change} />
 
       {/* Points */}
-      <div className='text-right'>
+      <div className='text-right shrink-0'>
         <span
           className='text-lg font-bold'
           style={{
@@ -149,7 +152,9 @@ function SkeletonRow() {
 export default function LeaderboardPage() {
   const { user } = useAuth();
   const [players, setPlayers] = useState([]);
-  const [rankSnapshot, setRankSnapshot] = useState({});
+  // Per-user position movement since the last completed match (precomputed and stored
+  // by matchSync on match-end, so the arrows stay stable between matches).
+  const [rankChange, setRankChange] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -166,7 +171,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'leaderboard', 'rankSnapshot'), (snap) => {
-      if (snap.exists()) setRankSnapshot(snap.data());
+      if (snap.exists()) setRankChange(snap.data().change || {});
     });
     return unsub;
   }, []);
@@ -199,20 +204,15 @@ export default function LeaderboardPage() {
           <p>Todavía no hay jugadores en la tabla.</p>
         </div>
       ) : (
-        players.map((player, i) => {
-          const currentRank = ranks[i];
-          const prevRank = rankSnapshot[player.id];
-          const change = prevRank != null ? prevRank - currentRank : null;
-          return (
-            <PlayerRow
-              key={player.id}
-              entry={player}
-              rank={currentRank}
-              isCurrentUser={player.id === user?.uid}
-              change={change}
-            />
-          );
-        })
+        players.map((player, i) => (
+          <PlayerRow
+            key={player.id}
+            entry={player}
+            rank={ranks[i]}
+            isCurrentUser={player.id === user?.uid}
+            change={rankChange[player.id] ?? null}
+          />
+        ))
       )}
     </div>
   );
