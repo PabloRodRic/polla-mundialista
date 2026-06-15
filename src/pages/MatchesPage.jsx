@@ -4,7 +4,7 @@ import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
-import { fetchOthersBets } from '../services/preTournamentService';
+import { fetchOthersBets, subscribeToGroupPredictions } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import BetsIconButton from '../components/BetsIconButton';
 
@@ -76,7 +76,11 @@ function TeamFlag({ match, side }) {
   return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />;
 }
 
-function MatchCard({ match, onShowBets, betsLocked }) {
+function MatchCard({ match, onShowBets, betsLocked, prediction }) {
+  const pA = prediction?.predictedScoreA;
+  const pB = prediction?.predictedScoreB;
+  const hasPrediction = pA != null && pB != null;
+  const scored = match.status === 'finished' || match.status === 'live';
   return (
     <div
       className='rounded-xl p-4 mb-3'
@@ -147,6 +151,27 @@ function MatchCard({ match, onShowBets, betsLocked }) {
           📍 {match.venue}
         </p>
       )}
+
+      {/* Your prediction + points being awarded */}
+      {hasPrediction && (
+        <div
+          className='mt-3 pt-2 flex items-center justify-center gap-2 text-xs'
+          style={{ borderTop: '1px solid var(--color-border)' }}
+        >
+          <span style={{ color: 'var(--color-text-muted)' }}>Tu pronóstico:</span>
+          <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+            {pA} – {pB}
+          </span>
+          {scored && prediction.pointsEarned != null && (
+            <span
+              className='font-semibold'
+              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
+            >
+              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -181,6 +206,10 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(DEFAULT_TIME_FILTER);
+  // The current user's own predictions, so each card can show their pick + points.
+  // Group fixtures live in preTournamentGroupPredictions; knockout fixtures in predictions.
+  const [groupPreds, setGroupPreds] = useState({});
+  const [livePreds, setLivePreds] = useState({});
 
   // "Ver pronósticos de otros" popup
   const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'group' });
@@ -215,6 +244,28 @@ export default function MatchesPage() {
     );
     return unsub;
   }, []);
+
+  // Current user's group-stage predictions
+  useEffect(() => {
+    if (!user) return;
+    return subscribeToGroupPredictions(user.uid, setGroupPreds);
+  }, [user]);
+
+  // Current user's knockout predictions (in-tournament `predictions` collection)
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'predictions'), orderBy('matchId'));
+    return onSnapshot(q, (snap) => {
+      const preds = {};
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.userId === user.uid) preds[data.matchId] = data;
+      });
+      setLivePreds(preds);
+    });
+  }, [user]);
+
+  const userPreds = { ...groupPreds, ...livePreds };
 
   // Predictions (and therefore others' bets) unlock once the tournament starts —
   // i.e. the earliest group-stage match has kicked off.
@@ -281,7 +332,13 @@ export default function MatchesPage() {
               {section.key}
             </h2>
             {section.matches.map((m) => (
-              <MatchCard key={m.id} match={m} onShowBets={openBets} betsLocked={betsLocked} />
+              <MatchCard
+                key={m.id}
+                match={m}
+                onShowBets={openBets}
+                betsLocked={betsLocked}
+                prediction={userPreds[m.id]}
+              />
             ))}
           </div>
         ))
@@ -297,6 +354,7 @@ export default function MatchesPage() {
         currentUserId={user?.uid}
         homeFlag={betsMatch?.flagA}
         awayFlag={betsMatch?.flagB}
+        showPoints={betsMatch?.status === 'finished' || betsMatch?.status === 'live'}
       />
     </div>
   );

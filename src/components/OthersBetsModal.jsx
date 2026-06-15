@@ -18,17 +18,18 @@ export default function OthersBetsModal({
   currentUserId,
   homeFlag,
   awayFlag,
+  showPoints = false,
 }) {
   if (!open) return null;
 
   return (
     <div
-      className='fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4'
+      className='fixed inset-0 z-50 flex items-center justify-center p-4'
       style={{ background: 'rgba(6, 14, 9, 0.7)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease' }}
       onClick={onClose}
     >
       <div
-        className='relative w-full max-w-sm sm:max-w-lg rounded-3xl p-6 pt-7 max-h-[80vh] flex flex-col'
+        className='relative w-full max-w-sm sm:max-w-lg rounded-3xl p-5 pt-5 sm:p-6 sm:pt-7 max-h-[92dvh] sm:max-h-[80vh] flex flex-col'
         style={{
           background: 'var(--color-surface-card)',
           border: '1px solid var(--color-border)',
@@ -101,9 +102,9 @@ export default function OthersBetsModal({
                   border: `1px solid ${isMe ? 'rgba(212,168,67,0.45)' : 'var(--color-border)'}`,
                 };
 
-                // Group / live with known teams: single-line row — name on the left,
-                // then flags around the score. The favored side (higher score) gets a
-                // gold ring so it's clear who the user gave the advantage to.
+                // Group / live with known teams: single-line row — name, the points the
+                // user earned, then flags around the score. The favored side (higher
+                // score) gets a gold ring so it's clear who they gave the advantage to.
                 if ((type === 'group' || type === 'live') && (homeFlag || awayFlag)) {
                   const homeFavored = hasScore && b.scoreA > b.scoreB;
                   const awayFavored = hasScore && b.scoreA < b.scoreB;
@@ -117,14 +118,29 @@ export default function OthersBetsModal({
                       />
                     );
                   return (
-                    <li key={b.userId} className='flex items-center gap-2.5 rounded-xl px-2.5 py-2' style={rowStyle}>
+                    <li
+                      key={b.userId}
+                      className='flex items-center gap-2 rounded-xl px-2.5 py-2 text-[11px] sm:text-xs'
+                      style={rowStyle}
+                    >
                       {avatar}
-                      {nameEl}
-                      <div className='ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0 text-xs sm:text-sm'>
+                      <span className='flex-1 min-w-0 font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
+                        {b.name}
+                        {isMe && <span style={{ color: 'var(--color-gold)' }}> (tú)</span>}
+                      </span>
+                      <div className='flex items-center gap-1.5 sm:gap-2 shrink-0'>
+                        {showPoints && b.pointsEarned != null && (
+                          <span
+                            className='font-semibold tabular-nums'
+                            style={{ color: b.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
+                          >
+                            {b.pointsEarned} pts
+                          </span>
+                        )}
                         {flag(homeFlag, homeFavored)}
                         <span
                           className='font-bold tabular-nums'
-                          style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}
+                          style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
                         >
                           {hasScore ? `${b.scoreA} – ${b.scoreB}` : 'vs'}
                         </span>

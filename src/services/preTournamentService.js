@@ -53,6 +53,7 @@ async function fetchScoreBets(collectionName, matchId, usersMap) {
       photoURL: u.photoURL || null,
       scoreA: data.predictedScoreA,
       scoreB: data.predictedScoreB,
+      pointsEarned: data.pointsEarned ?? null,
       pick: null,
     })
   })

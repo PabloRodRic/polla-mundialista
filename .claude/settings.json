@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx eslint src/components/OthersBetsModal.jsx)",
+      "PowerShell(npx eslint src/components/OthersBetsModal.jsx src/pages/MatchesPage.jsx src/services/preTournamentService.js)"
+    ]
+  }
+}
