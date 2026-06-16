@@ -78,7 +78,7 @@ export default function Layout() {
   }
 
   return (
-    <div className='min-h-dvh flex flex-col' style={{ background: 'var(--color-surface)' }}>
+    <div className='h-dvh flex flex-col overflow-hidden' style={{ background: 'var(--color-surface)' }}>
       {/* Top bar */}
       <header
         className='flex items-center justify-between px-4 py-2 sticky top-0 z-10 backdrop-blur-sm'
@@ -284,11 +284,8 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Page content */}
-      <main
-        className='flex-1 overflow-y-auto'
-        style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) * 0.5)' }}
-      >
+      {/* Page content — the only scroll container; min-h-0 lets it scroll inside the flex column */}
+      <main className='flex-1 min-h-0 overflow-y-auto pb-4'>
         <Outlet />
       </main>
 
@@ -341,9 +338,10 @@ export default function Layout() {
         </div>
       )}
 
-      {/* Bottom tab bar */}
+      {/* Bottom tab bar — an in-flow flex child so it's structurally pinned to the
+          bottom of the app shell and never drifts on first paint / viewport changes */}
       <nav
-        className='fixed bottom-0 left-0 right-0 z-10 flex'
+        className='shrink-0 z-10 flex'
         style={{
           background: 'var(--color-surface-glass)',
           borderTop: '1px solid var(--color-border)',
