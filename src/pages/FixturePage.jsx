@@ -1293,7 +1293,7 @@ export default function TournamentPage() {
   }
 
   return (
-    <div className='max-w-lg md:max-w-5xl mx-auto px-4 pt-4 pb-28'>
+    <div className='max-w-lg md:max-w-5xl mx-auto px-4 pt-4'>
       {/* Header — full width so the counter sits at the far right on wide screens */}
       <div className='flex items-baseline justify-between mb-4'>
         <h1
