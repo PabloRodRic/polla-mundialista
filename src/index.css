@@ -32,18 +32,11 @@
   --color-border: #d8dce6;
 }
 
-/* Full-height chain so the app shell can fill the screen with a plain `height: 100%`
-   instead of `dvh`/`vh`, which iOS mis-measures on first paint (bottom nav drifts). */
-html,
-body,
-#root {
-  height: 100%;
-}
-
 body {
   font-family: var(--font-body);
   background-color: var(--color-surface);
   color: var(--color-text-primary);
+  min-height: 100dvh;
 }
 
 /* Remove number input spinners on all browsers */
