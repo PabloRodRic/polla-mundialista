@@ -284,11 +284,8 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Page content */}
-      <main
-        className='flex-1 overflow-y-auto'
-        style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom) * 0.5)' }}
-      >
+      {/* Page content — bottom padding clears the fixed nav (74px) plus a little gap */}
+      <main className='flex-1 overflow-y-auto' style={{ paddingBottom: '84px' }}>
         <Outlet />
       </main>
 
@@ -347,8 +344,10 @@ export default function Layout() {
         style={{
           background: 'var(--color-surface-glass)',
           borderTop: '1px solid var(--color-border)',
-          height: 'calc(64px + env(safe-area-inset-bottom) * 0.5)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom) * 0.5)',
+          // 64px icon row + a small fixed bottom inset so the icons sit a touch higher.
+          // Plain px (no env/dvh) to avoid the iOS first-paint issues we hit before.
+          height: '74px',
+          paddingBottom: '10px',
           backdropFilter: 'blur(12px)',
         }}
       >
