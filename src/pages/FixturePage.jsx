@@ -1005,7 +1005,7 @@ export default function TournamentPage() {
   const [betsLoading, setBetsLoading] = useState(false);
 
   function openBets({ matchId, type, title, field }) {
-    setBetsModal({ open: true, title, type });
+    setBetsModal({ open: true, title, type, matchId });
     setBetsData([]);
     setBetsLoading(true);
     const fetcher =
@@ -1300,6 +1300,9 @@ export default function TournamentPage() {
     eliminatorias: Object.values(roundIncomplete).some(Boolean),
     premios: !bracketData?.babyGender || !bracketData?.goldenBoot || !bracketData?.goldenBall,
   };
+
+  // Match backing the open bets modal — supplies flags + status for points display
+  const betsMatch = betsModal.matchId ? matches.find((m) => m.id === betsModal.matchId) : null;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -1806,6 +1809,9 @@ export default function TournamentPage() {
         bets={betsData}
         loading={betsLoading}
         currentUserId={user?.uid}
+        homeFlag={betsMatch?.flagA}
+        awayFlag={betsMatch?.flagB}
+        showPoints={betsMatch?.status === 'finished' || betsMatch?.status === 'live'}
       />
     </div>
   );
