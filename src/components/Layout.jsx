@@ -78,7 +78,7 @@ export default function Layout() {
   }
 
   return (
-    <div className='h-dvh flex flex-col overflow-hidden' style={{ background: 'var(--color-surface)' }}>
+    <div className='min-h-dvh flex flex-col' style={{ background: 'var(--color-surface)' }}>
       {/* Top bar */}
       <header
         className='flex items-center justify-between px-4 py-2 sticky top-0 z-10 backdrop-blur-sm'
@@ -284,8 +284,8 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Page content — the only scroll container; min-h-0 lets it scroll inside the flex column */}
-      <main className='flex-1 min-h-0 overflow-y-auto pb-4'>
+      {/* Page content — scrolls with the document; padded so it clears the fixed nav */}
+      <main className='flex-1' style={{ paddingBottom: 'calc(72px + env(safe-area-inset-bottom))' }}>
         <Outlet />
       </main>
 
@@ -338,16 +338,17 @@ export default function Layout() {
         </div>
       )}
 
-      {/* Bottom tab bar — an in-flow flex child so it's structurally pinned to the
-          bottom of the app shell and never drifts on first paint / viewport changes */}
+      {/* Bottom tab bar — fixed to the physical bottom and padded for the home-indicator
+          safe area. No backdrop-filter: on iOS it mis-positions fixed elements until a
+          repaint (the "menu floats mid-screen until you tap a tab" bug). The glass bg is
+          already 93% opaque, so dropping the blur looks the same. */}
       <nav
-        className='shrink-0 z-10 flex'
+        className='fixed bottom-0 left-0 right-0 z-20 flex'
         style={{
           background: 'var(--color-surface-glass)',
           borderTop: '1px solid var(--color-border)',
-          height: 'calc(64px + env(safe-area-inset-bottom) * 0.5)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom) * 0.5)',
-          backdropFilter: 'blur(12px)',
+          height: 'calc(64px + env(safe-area-inset-bottom))',
+          paddingBottom: 'env(safe-area-inset-bottom)',
         }}
       >
         {tabs.map((tab) => (
