@@ -3,20 +3,19 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { startAutoSync, stopAutoSync } from '../services/matchSync';
 import LeaderboardIcon from '../assets/leaderboard.svg?react';
-import FixtureIcon from '../assets/tournament.svg?react';
+import BetsIcon from '../assets/bets.svg?react';
 import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
-import PredictionIcon from '../assets/prediction.svg?react';
+import KnockoutsIcon from '../assets/knockouts.svg?react';
 import MatchesIcon from '../assets/matches.svg?react';
 import logo from '../assets/logo-2.png';
 import { APP_VERSION } from '../version';
 
 const NAV_TABS = [
   { path: '/partidos', icon: MatchesIcon, label: 'Partidos' },
-  { path: '/pronostico', icon: FixtureIcon, label: 'Pronóstico' },
-  { path: '/predicciones', icon: PredictionIcon, label: 'Predicciones' },
+  { path: '/pronostico', icon: BetsIcon, label: 'Pronóstico' },
+  { path: '/predicciones', icon: KnockoutsIcon, label: 'Llaves' },
   { path: '/tabla', icon: LeaderboardIcon, label: 'Tabla' },
-  { path: '/reglas', icon: RulesIcon, label: 'Reglas' },
 ];
 
 export default function Layout() {
@@ -217,6 +216,17 @@ export default function Layout() {
                       <path d='M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' />
                     </svg>
                     Cambiar nombre
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/reglas');
+                    }}
+                    className='w-full flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover'
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
+                    <RulesIcon className='w-4 h-4 shrink-0' style={{ color: 'currentColor' }} />
+                    Reglas
                   </button>
                   <button
                     onClick={() => window.location.reload()}

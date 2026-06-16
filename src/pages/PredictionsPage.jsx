@@ -372,7 +372,7 @@ export default function PredictionsPage() {
           className='text-xl font-bold'
           style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}
         >
-          Predicciones
+          Llaves
         </h1>
         {tournamentStarted && pendingCount > 0 && (
           <span
