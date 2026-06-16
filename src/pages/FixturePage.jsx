@@ -1,9 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTournamentData } from '../contexts/TournamentDataContext';
 import {
-  subscribeToGroupPredictions,
   saveGroupPrediction,
   subscribeToBracket,
   saveBracketPick,
@@ -16,6 +14,7 @@ import {
 } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import BetsIconButton from '../components/BetsIconButton';
+import PointsBadge from '../components/PointsBadge';
 import { computeGroupStandings, getBest3rdPlaceTeams, countPredictedMatches } from '../utils/standingsCalculator';
 import { tlaLabel } from '../utils/teamLabels';
 import {
@@ -279,14 +278,7 @@ function GroupMatchCard({ match, prediction, onSave, saving, locked, onShowBets 
           <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
             {match.scoreA} – {match.scoreB}
           </span>
-          {prediction?.pointsEarned !== undefined && (
-            <span
-              className='font-semibold'
-              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
-            >
-              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
-            </span>
-          )}
+          <PointsBadge points={prediction?.pointsEarned} />
         </div>
       )}
     </div>
@@ -984,11 +976,16 @@ function BracketOverview({ columns, selected, onSelect }) {
 export default function TournamentPage() {
   const { user } = useAuth();
 
-  // Data
-  const [matches, setMatches] = useState([]);
-  const [groupPredictions, setGroupPredictions] = useState({});
+  // Shared data: matches, the user's group predictions and the tournament-lock state
+  // come from TournamentData so they stay in sync with the other pages. The bracket
+  // doc is specific to this page, so it keeps its own subscription below.
+  const {
+    matches,
+    matchesLoading: loading,
+    groupPreds: groupPredictions,
+    tournamentStarted: tournamentLocked,
+  } = useTournamentData();
   const [bracketData, setBracketData] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   // UI state
   const [section, setSection] = useState('grupos'); // 'grupos' | 'eliminatorias' | 'premios'
@@ -1022,23 +1019,6 @@ export default function TournamentPage() {
       .finally(() => setBetsLoading(false));
   }
 
-  // ─── Load matches ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
-    return onSnapshot(q, (snap) => {
-      const data = [];
-      snap.forEach((d) => data.push({ id: d.id, ...d.data() }));
-      setMatches(data);
-      setLoading(false);
-    });
-  }, []);
-
-  // ─── Load group predictions ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (!user) return;
-    return subscribeToGroupPredictions(user.uid, setGroupPredictions);
-  }, [user]);
-
   // ─── Load bracket data ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
@@ -1048,14 +1028,6 @@ export default function TournamentPage() {
   // ─── Derived data ───────────────────────────────────────────────────────────
 
   const groupMatches = matches.filter((m) => m.stage === 'group');
-
-  // Tournament lock: locked if first group match has kicked off
-  const firstMatchDate = groupMatches.reduce((earliest, m) => {
-    const d = m.date?.toDate?.();
-    if (!d) return earliest;
-    return !earliest || d < earliest ? d : earliest;
-  }, null);
-  const tournamentLocked = firstMatchDate ? new Date() >= firstMatchDate : false;
 
   // Build team lookup (tla → team object)
   const teamsByTla = buildTeamLookup(groupMatches);

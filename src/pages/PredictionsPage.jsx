@@ -1,11 +1,13 @@
-import { useEffect, useState, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { useState, useRef } from 'react';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
+import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { fetchOthersBets } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import BetsIconButton from '../components/BetsIconButton';
+import PointsBadge from '../components/PointsBadge';
 
 const KNOCKOUT_STAGES = ['roundOf32', 'roundOf16', 'quarterfinals', 'semifinals', 'thirdPlace', 'final'];
 
@@ -229,14 +231,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, matchNu
           <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
             {match.scoreA} – {match.scoreB}
           </span>
-          {prediction?.pointsEarned !== undefined && (
-            <span
-              className='font-semibold'
-              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
-            >
-              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
-            </span>
-          )}
+          <PointsBadge points={prediction?.pointsEarned} />
         </div>
       )}
 
@@ -273,12 +268,17 @@ function SkeletonCard() {
 
 export default function PredictionsPage() {
   const { user } = useAuth();
-  const [matches, setMatches] = useState([]);
-  const [predictions, setPredictions] = useState({});
-  const [loading, setLoading] = useState(true);
+  // Shared subscription: all matches, the user's knockout predictions, and the
+  // tournament-start date all live in TournamentData so they match the other pages.
+  const {
+    matches: allMatches,
+    matchesLoading: loading,
+    livePreds: predictions,
+    firstGroupMatchDate: tournamentStart,
+    tournamentStarted,
+  } = useTournamentData();
   const [saving, setSaving] = useState({});
   const [filter, setFilter] = useState('upcoming');
-  const [tournamentStart, setTournamentStart] = useState(null);
   const debounceRef = useRef({});
 
   // "Ver pronósticos de otros" popup
@@ -296,40 +296,8 @@ export default function PredictionsPage() {
       .finally(() => setBetsLoading(false));
   }
 
-  useEffect(() => {
-    const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = [];
-      let firstGroup = null;
-      snap.forEach((d) => {
-        const m = { id: d.id, ...d.data() };
-        // Tournament start = kickoff of the earliest group-stage match
-        if (m.stage === 'group') {
-          const dt = m.date?.toDate?.();
-          if (dt && (!firstGroup || dt < firstGroup)) firstGroup = dt;
-        }
-        if (KNOCKOUT_STAGES.includes(m.stage)) data.push(m);
-      });
-      setMatches(data);
-      setTournamentStart(firstGroup);
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'predictions'), orderBy('matchId'));
-    const unsub = onSnapshot(q, (snap) => {
-      const preds = {};
-      snap.forEach((d) => {
-        const data = d.data();
-        if (data.userId === user.uid) preds[data.matchId] = { id: d.id, ...data };
-      });
-      setPredictions(preds);
-    });
-    return unsub;
-  }, [user]);
+  // This tab only predicts knockout fixtures.
+  const matches = allMatches.filter((m) => KNOCKOUT_STAGES.includes(m.stage));
 
   async function writePrediction(matchId, scoreA, scoreB) {
     setSaving((s) => ({ ...s, [matchId]: true }));
@@ -395,10 +363,8 @@ export default function PredictionsPage() {
       });
   }
 
-  // The whole tab stays locked until the World Cup kicks off (first group match).
-  // Before that, every prediction belongs in the Pronóstico tab.
-  const tournamentStarted = tournamentStart ? new Date() >= tournamentStart : false;
-
+  // The whole tab stays locked until the World Cup kicks off (first group match);
+  // `tournamentStarted` comes from the shared TournamentData context.
   return (
     <div className='max-w-5xl mx-auto px-4 pt-4 pb-6'>
       <div className='flex items-baseline justify-between mb-1'>

@@ -932,12 +932,12 @@ export default function AdminPage() {
         Ajuste Manual de Resultados
       </h2>
 
-      <div className='flex gap-2 mb-4 overflow-x-auto pb-1'>
+      <div className='flex justify-center gap-2 mb-4'>
         {TIME_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => setMatchFilter(f.value)}
-            className='shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors'
+            className='flex-1 md:flex-none md:px-10 py-1.5 md:py-3 rounded-full text-xs font-medium transition-colors'
             style={{
               background: matchFilter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
               color: matchFilter === f.value ? '#111318' : 'var(--color-text-secondary)',

@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
-import { fetchOthersBets, subscribeToGroupPredictions } from '../services/preTournamentService';
+import { fetchOthersBets } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import BetsIconButton from '../components/BetsIconButton';
+import PointsBadge from '../components/PointsBadge';
 
 const STAGE_LABELS = {
   group: 'Fase de Grupos',
@@ -162,14 +162,7 @@ function MatchCard({ match, onShowBets, betsLocked, prediction }) {
           <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
             {pA} – {pB}
           </span>
-          {scored && prediction.pointsEarned != null && (
-            <span
-              className='font-semibold'
-              style={{ color: prediction.pointsEarned > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
-            >
-              {prediction.pointsEarned > 0 ? `+${prediction.pointsEarned} pts` : '· sin puntos'}
-            </span>
-          )}
+          {scored && <PointsBadge points={prediction.pointsEarned} />}
         </div>
       )}
     </div>
@@ -203,13 +196,10 @@ function SkeletonCard() {
 
 export default function MatchesPage() {
   const { user } = useAuth();
-  const [matches, setMatches] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Matches, the user's merged predictions and the tournament-lock state all come
+  // from the shared TournamentData subscription (no per-page re-fetch / re-derive).
+  const { matches, matchesLoading: loading, userPreds, tournamentStarted: betsLocked } = useTournamentData();
   const [filter, setFilter] = useState(DEFAULT_TIME_FILTER);
-  // The current user's own predictions, so each card can show their pick + points.
-  // Group fixtures live in preTournamentGroupPredictions; knockout fixtures in predictions.
-  const [groupPreds, setGroupPreds] = useState({});
-  const [livePreds, setLivePreds] = useState({});
 
   // "Ver pronósticos de otros" popup
   const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'group' });
@@ -229,53 +219,6 @@ export default function MatchesPage() {
       .catch(() => setBetsData([]))
       .finally(() => setBetsLoading(false));
   }
-
-  useEffect(() => {
-    const q = query(collection(db, 'matches'), orderBy('date', 'asc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const data = [];
-        snap.forEach((d) => data.push({ id: d.id, ...d.data() }));
-        setMatches(data);
-        setLoading(false);
-      },
-      () => setLoading(false),
-    );
-    return unsub;
-  }, []);
-
-  // Current user's group-stage predictions
-  useEffect(() => {
-    if (!user) return;
-    return subscribeToGroupPredictions(user.uid, setGroupPreds);
-  }, [user]);
-
-  // Current user's knockout predictions (in-tournament `predictions` collection)
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'predictions'), orderBy('matchId'));
-    return onSnapshot(q, (snap) => {
-      const preds = {};
-      snap.forEach((d) => {
-        const data = d.data();
-        if (data.userId === user.uid) preds[data.matchId] = data;
-      });
-      setLivePreds(preds);
-    });
-  }, [user]);
-
-  const userPreds = { ...groupPreds, ...livePreds };
-
-  // Predictions (and therefore others' bets) unlock once the tournament starts —
-  // i.e. the earliest group-stage match has kicked off.
-  const firstGroupMatchDate = matches.reduce((earliest, m) => {
-    if (m.stage !== 'group') return earliest;
-    const d = m.date?.toDate?.();
-    if (!d) return earliest;
-    return !earliest || d < earliest ? d : earliest;
-  }, null);
-  const betsLocked = firstGroupMatchDate ? new Date() >= firstGroupMatchDate : false;
 
   // Filter matches by the shared time-based filter (Hoy / Próximos / Finalizados / Todos)
   const filtered = filterMatchesByTime(matches, filter);
@@ -302,7 +245,7 @@ export default function MatchesPage() {
       </h1>
 
       {/* Filter tabs */}
-      <div className='flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none'>
+      <div className='flex justify-center gap-2 mb-4'>
         {TIME_FILTERS.map((f) => (
           <FilterTab key={f.value} label={f.label} value={f.value} current={filter} onClick={setFilter} />
         ))}
@@ -365,7 +308,7 @@ function FilterTab({ label, value, current, onClick }) {
   return (
     <button
       onClick={() => onClick(value)}
-      className='shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors'
+      className='flex-1 md:flex-none md:px-10 py-1.5 md:py-3 rounded-full text-xs font-medium transition-colors'
       style={{
         background: active ? 'var(--color-gold)' : 'var(--color-surface-card)',
         color: active ? '#111318' : 'var(--color-text-secondary)',

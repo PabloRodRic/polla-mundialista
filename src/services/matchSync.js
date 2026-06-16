@@ -17,6 +17,11 @@ import scoring from '../config/scoring.json';
 import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
 import { BRACKET_R32, BRACKET_R16, BRACKET_QF, BRACKET_SF } from '../utils/bracketUtils';
 import { resolveAllUsersBrackets } from './preTournamentService';
+import { compareLeaderboard, rankPlayersMap } from '../utils/leaderboard';
+
+// Re-exported so existing importers (`import { compareLeaderboard } from '../services/matchSync'`)
+// keep working while the canonical definition lives in utils/leaderboard.
+export { compareLeaderboard };
 
 // ─── Stage / status normalization ───────────────────────────────────────────
 
@@ -133,14 +138,6 @@ function resultTier(predA, predB, realA, realB) {
   return 1;
 }
 
-// Leaderboard order: most points, then most exact scorelines, then name (stable).
-export function compareLeaderboard(a, b) {
-  return (
-    (b.totalPoints || 0) - (a.totalPoints || 0) ||
-    (b.exactScores || 0) - (a.exactScores || 0) ||
-    (a.name || '').localeCompare(b.name || '')
-  );
-}
 
 // ─── Core sync ───────────────────────────────────────────────────────────────
 
@@ -628,25 +625,6 @@ async function calculateTournamentOutcomePoints() {
   await recalcUsers(affectedUserIds);
 }
 
-// Tie-aware ranks (standard competition ranking): players with the same points AND
-// the same exact-score count share a rank, matching the leaderboard's own logic.
-// Returns { userId: rank }.
-function rankUsersWithTies(users) {
-  const sorted = [...users].sort(compareLeaderboard);
-  const ranks = {};
-  sorted.forEach((u, i) => {
-    if (i > 0) {
-      const prev = sorted[i - 1];
-      const tied =
-        (u.totalPoints || 0) === (prev.totalPoints || 0) && (u.exactScores || 0) === (prev.exactScores || 0);
-      ranks[u.id] = tied ? ranks[prev.id] : i + 1;
-    } else {
-      ranks[u.id] = 1;
-    }
-  });
-  return ranks;
-}
-
 // Recompute the leaderboard "position movement" arrows. Called only when a match
 // genuinely finishes for the first time — never on live updates, admin re-runs of an
 // already-scored match, or full recalculations — so the arrows reflect the movement
@@ -658,7 +636,7 @@ function rankUsersWithTies(users) {
 async function updateRankMovement() {
   const usersSnap = await getDocs(collection(db, 'users'));
   const users = usersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const newRanks = rankUsersWithTies(users);
+  const newRanks = rankPlayersMap(users);
 
   const prevDoc = await getDoc(doc(db, 'leaderboard', 'rankSnapshot'));
   const prevRanks = prevDoc.exists() ? prevDoc.data().ranks || {} : {};
