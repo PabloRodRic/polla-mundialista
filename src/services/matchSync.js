@@ -167,7 +167,6 @@ export async function syncMatchesFromAPI() {
 
       if (
         normalized.status === 'finished' &&
-        prev?.status !== 'finished' &&
         !prev?.pointsCalculated &&
         !prev?.adminOverride
       ) {
