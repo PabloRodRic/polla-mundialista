@@ -492,7 +492,7 @@ export default function LeaderboardPage() {
           </div>
 
           {/* Bonus points: group standings + team advancement */}
-          {bonusPoints && (bonusPoints.totalGsp > 0 || bonusPoints.totalAdv > 0) && (
+          {bonusPoints && bonusPoints.scoredGroups.length > 0 && (
             <div
               className='rounded-2xl px-4 py-3 mb-4'
               style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}

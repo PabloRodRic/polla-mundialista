@@ -215,6 +215,20 @@ export async function syncMatchesFromAPI() {
       await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage);
     }
 
+    // Sweep for groups that are fully finished but whose standings weren't scored yet
+    // (handles the case where pointsCalculated was set before calculateGroupStandingsPoints ran).
+    // Safe to call repeatedly — the function guards against double-runs via gsp_X_done.
+    const groupsToCheck = new Set();
+    for (const m of Object.values(existing)) {
+      if (m.stage === 'group' && m.group && m.status === 'finished') groupsToCheck.add(m.group);
+    }
+    for (const m of newlyFinished) {
+      if (m.stage === 'group' && m.group) groupsToCheck.add(m.group);
+    }
+    for (const group of groupsToCheck) {
+      await calculateGroupStandingsPoints(group);
+    }
+
     return apiMatches.length;
   } catch (err) {
     syncStatus = { ...syncStatus, syncing: false, error: err.message };
