@@ -8,12 +8,14 @@ import RulesIcon from '../assets/rules.svg?react';
 import AdminIcon from '../assets/admin.svg?react';
 import KnockoutsIcon from '../assets/knockouts.svg?react';
 import MatchesIcon from '../assets/matches.svg?react';
+import GroupsIcon from '../assets/groups.svg?react';
 import logo from '../assets/logo-2.png';
 import { APP_VERSION } from '../version';
 
 const NAV_TABS = [
   { path: '/partidos', icon: MatchesIcon, label: 'Partidos' },
   { path: '/pronostico', icon: BetsIcon, label: 'Pronóstico' },
+  { path: '/grupos', icon: GroupsIcon, label: 'Grupos' },
   { path: '/predicciones', icon: KnockoutsIcon, label: 'Llaves' },
   { path: '/tabla', icon: LeaderboardIcon, label: 'Tabla' },
 ];

@@ -6,6 +6,7 @@ import MatchesPage from './pages/MatchesPage';
 import PredictionsPage from './pages/PredictionsPage';
 import FixturePage from './pages/FixturePage';
 import LeaderboardPage from './pages/LeaderboardPage';
+import GroupsPage from './pages/GroupsPage';
 import RulesPage from './pages/RulesPage';
 import AdminPage from './pages/AdminPage';
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path='/pronostico' element={<FixturePage />} />
         <Route path='/predicciones' element={<PredictionsPage />} />
         <Route path='/tabla' element={<LeaderboardPage />} />
+        <Route path='/grupos' element={<GroupsPage />} />
         <Route path='/reglas' element={<RulesPage />} />
         <Route path='/admin' element={<AdminPage />} />
         <Route path='*' element={<Navigate to='/partidos' replace />} />
