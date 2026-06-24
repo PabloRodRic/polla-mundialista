@@ -406,42 +406,39 @@ async function calculateGroupStandingsPoints(group) {
     predsByUser[pd.userId][pd.matchId] = pd;
   });
 
-  // For each user, compute predicted standings, award standing points + R32 advancement for top 2
-  const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'));
+  // For each user, compute predicted standings, award standing points + R32 advancement for top 2.
+  // Iterate over predsByUser (all users with group predictions) — not just those with bracket docs,
+  // since users who only made group picks won't have a preTournamentBracket doc yet.
   const batch = writeBatch(db);
   const affectedUserIds = new Set();
 
   const advR32Pts = scoring.knockout.teamAdvancement.roundOf32;
   const actualQualifiers = [actualStandings[0]?.tla, actualStandings[1]?.tla].filter(Boolean);
+  const fs = scoring.groupStage.finalStandings;
 
-  bracketSnap.forEach((bracketDoc) => {
-    const userId = bracketDoc.data().userId;
-    if (!userId) return;
-
-    const userPreds = predsByUser[userId] || {};
+  for (const [userId, userPreds] of Object.entries(predsByUser)) {
     const predictedStandings = computeGroupStandings(teams, groupMatches, userPreds);
     const predictedQualifiers = new Set([predictedStandings[0]?.tla, predictedStandings[1]?.tla].filter(Boolean));
 
-    const fs = scoring.groupStage.finalStandings;
     let standingPoints = 0;
     if (predictedStandings[0]?.tla === actualStandings[0]?.tla) standingPoints += fs.correct1stPlace;
     if (predictedStandings[1]?.tla === actualStandings[1]?.tla) standingPoints += fs.correct2ndPlace;
     if (predictedStandings[2]?.tla === actualStandings[2]?.tla) standingPoints += fs.correct3rdPlace;
     if (predictedStandings[3]?.tla === actualStandings[3]?.tla) standingPoints += fs.correct4thPlace;
 
-    const updates = { [`gsp_${group}`]: standingPoints };
-    // R32 advancement: award pts for each actual qualifier the user predicted in top 2
+    const updates = { userId, [`gsp_${group}`]: standingPoints };
     for (const tla of actualQualifiers) {
       updates[`adv_roundOf32_${tla}`] = predictedQualifiers.has(tla) ? advR32Pts : 0;
     }
 
-    batch.update(bracketDoc.ref, updates);
+    // setDoc with merge creates the doc if it doesn't exist yet
+    batch.set(doc(db, 'preTournamentBracket', userId), updates, { merge: true });
     affectedUserIds.add(userId);
-  });
+  }
 
-  // Mark this group's standings as calculated
-  await setDoc(scoreStateRef, { [`gsp_${group}_done`]: true }, { merge: true });
   await batch.commit();
+  // Mark done AFTER the batch so a failed batch doesn't permanently block re-runs
+  await setDoc(scoreStateRef, { [`gsp_${group}_done`]: true }, { merge: true });
 
   await recalcUsers(affectedUserIds);
 
