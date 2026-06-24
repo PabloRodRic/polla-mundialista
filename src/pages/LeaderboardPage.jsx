@@ -275,7 +275,13 @@ export default function LeaderboardPage() {
   const TABS = [
     { key: 'ranking', label: 'Tabla' },
     { key: 'resultados', label: 'Mis Resultados' },
+    { key: 'estadisticas', label: 'Estadísticas' },
   ];
+
+  const leaderOf = (key) => players.reduce((best, p) => ((p[key] ?? 0) > (best[key] ?? 0) ? p : best), players[0] ?? null);
+  const exactLeader = leaderOf('exactScores');
+  const diffLeader = leaderOf('goalDiffScores');
+  const correctLeader = leaderOf('correctScores');
 
   return (
     <div className='max-w-lg mx-auto px-4 pt-4'>
@@ -331,6 +337,103 @@ export default function LeaderboardPage() {
                 change={rankChange[player.id] ?? null}
               />
             ))
+          )}
+        </>
+      )}
+
+      {/* ── ESTADÍSTICAS ── */}
+      {view === 'estadisticas' && (
+        <>
+          {loading ? (
+            Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} />)
+          ) : players.length === 0 ? (
+            <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
+              <p className='text-4xl mb-2'>📊</p>
+              <p>Todavía no hay datos.</p>
+            </div>
+          ) : (
+            <div className='flex flex-col gap-3 mb-6'>
+              {[
+                { label: 'Marcador Exacto', sublabel: 'exactos', icon: '🎯', key: 'exactScores', leader: exactLeader, color: 'var(--color-gold)' },
+                { label: 'Diferencia de Goles', sublabel: 'DG', icon: '📐', key: 'goalDiffScores', leader: diffLeader, color: 'var(--color-text-primary)' },
+                { label: 'Resultado Correcto', sublabel: 'correctos', icon: '✅', key: 'correctScores', leader: correctLeader, color: '#4caf72' },
+              ].map(({ label, sublabel, icon, key, leader, color }) => (
+                <div
+                  key={key}
+                  className='flex items-center gap-3 rounded-2xl px-4 py-3'
+                  style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+                >
+                  <span className='text-2xl shrink-0'>{icon}</span>
+                  <div className='flex-1 min-w-0'>
+                    <p className='text-xs font-medium' style={{ color: 'var(--color-text-muted)' }}>{label}</p>
+                    <div className='flex items-center gap-2 mt-0.5'>
+                      {leader?.photoURL ? (
+                        <img src={leader.photoURL} alt='' className='w-5 h-5 rounded-full object-cover shrink-0' />
+                      ) : (
+                        <div
+                          className='w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0'
+                          style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}
+                        >
+                          {leader?.name?.[0] || '?'}
+                        </div>
+                      )}
+                      <p className='text-sm font-semibold truncate' style={{ color: 'var(--color-text-primary)' }}>
+                        {leader?.name || '–'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className='text-right shrink-0'>
+                    <p className='text-2xl font-bold' style={{ color, fontFamily: 'var(--font-display)' }}>
+                      {leader?.[key] ?? 0}
+                    </p>
+                    <p className='text-[10px]' style={{ color: 'var(--color-text-muted)' }}>{sublabel}</p>
+                  </div>
+                </div>
+              ))}
+
+              {/* Full breakdown table */}
+              <div
+                className='rounded-2xl overflow-hidden'
+                style={{ border: '1px solid var(--color-border)' }}
+              >
+                <div
+                  className='grid grid-cols-4 px-3 py-2 text-[11px] font-semibold'
+                  style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)', gridTemplateColumns: '1fr auto auto auto' }}
+                >
+                  <span>Jugador</span>
+                  <span className='text-center w-12'>🎯</span>
+                  <span className='text-center w-12'>📐</span>
+                  <span className='text-center w-12'>✅</span>
+                </div>
+                {players.map((p) => (
+                  <div
+                    key={p.id}
+                    className='grid px-3 py-2.5 text-sm'
+                    style={{
+                      gridTemplateColumns: '1fr auto auto auto',
+                      borderTop: '1px solid var(--color-border)',
+                      background: p.id === user?.uid ? 'rgba(212,168,67,0.06)' : 'transparent',
+                    }}
+                  >
+                    <span
+                      className='truncate font-medium'
+                      style={{ color: p.id === user?.uid ? 'var(--color-gold)' : 'var(--color-text-primary)' }}
+                    >
+                      {p.name || p.email || 'Jugador'}
+                    </span>
+                    <span className='text-center w-12 font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
+                      {p.exactScores ?? 0}
+                    </span>
+                    <span className='text-center w-12 tabular-nums' style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}>
+                      {p.goalDiffScores ?? 0}
+                    </span>
+                    <span className='text-center w-12 tabular-nums' style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-display)' }}>
+                      {p.correctScores ?? 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </>
       )}
