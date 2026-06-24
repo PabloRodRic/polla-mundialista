@@ -22,7 +22,7 @@ export function passesTimeFilter(match, filter, now = new Date()) {
   const startOfTomorrow = new Date(startOfToday);
   startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
 
-  if (filter === 'hoy') return d >= startOfToday && d < startOfTomorrow;
+  if (filter === 'hoy') return (d >= startOfToday && d < startOfTomorrow) || match.status === 'live';
   if (filter === 'proximos') return d >= startOfTomorrow; // future days only — today lives under "Hoy"
   return true;
 }
