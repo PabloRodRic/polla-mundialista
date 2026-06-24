@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { collection, doc, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
-import { subscribeToGroupPredictions } from '../services/preTournamentService';
+import { subscribeToGroupPredictions, subscribeToBracket } from '../services/preTournamentService';
 import { compareLeaderboard, rankPlayers } from '../utils/leaderboard';
 
 const TournamentDataContext = createContext(null);
@@ -22,6 +22,7 @@ export function TournamentDataProvider({ children }) {
   // preTournamentGroupPredictions; knockout fixtures in the `predictions` collection.
   const [groupPreds, setGroupPreds] = useState({});
   const [livePreds, setLivePreds] = useState({});
+  const [myBracket, setMyBracket] = useState(null);
 
   // Leaderboard (all users) + the precomputed position-movement arrows.
   const [players, setPlayers] = useState([]);
@@ -50,6 +51,11 @@ export function TournamentDataProvider({ children }) {
   useEffect(() => {
     if (!user) return undefined;
     return subscribeToGroupPredictions(user.uid, setGroupPreds);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    return subscribeToBracket(user.uid, setMyBracket);
   }, [user]);
 
   useEffect(() => {
@@ -116,6 +122,7 @@ export function TournamentDataProvider({ children }) {
     groupPreds,
     livePreds,
     userPreds,
+    myBracket,
     firstGroupMatchDate,
     tournamentStarted,
     players,

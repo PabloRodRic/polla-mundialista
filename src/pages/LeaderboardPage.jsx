@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
@@ -257,6 +257,7 @@ export default function LeaderboardPage() {
     matches,
     matchesLoading,
     userPreds,
+    myBracket,
     players,
     playersLoading,
     ranks,
@@ -264,6 +265,25 @@ export default function LeaderboardPage() {
     currentUserRank,
     me,
   } = useTournamentData();
+
+  // Bonus points breakdown derived from the bracket document
+  const bonusPoints = useMemo(() => {
+    if (!myBracket) return null;
+    const groups = {};
+    let totalAdv = 0;
+    for (const [key, val] of Object.entries(myBracket)) {
+      if (key.startsWith('gsp_') && key.length === 5) {
+        const group = key[4]; // 'A'–'L'
+        groups[group] = (groups[group] || 0) + (val || 0);
+      }
+      if (key.startsWith('adv_')) totalAdv += val || 0;
+    }
+    const scoredGroups = Object.entries(groups)
+      .filter(([, pts]) => pts !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    const totalGsp = scoredGroups.reduce((s, [, pts]) => s + pts, 0);
+    return { scoredGroups, totalGsp, totalAdv };
+  }, [myBracket]);
 
   const loading = playersLoading;
 
@@ -470,6 +490,54 @@ export default function LeaderboardPage() {
               </p>
             </div>
           </div>
+
+          {/* Bonus points: group standings + team advancement */}
+          {bonusPoints && (bonusPoints.totalGsp > 0 || bonusPoints.totalAdv > 0) && (
+            <div
+              className='rounded-2xl px-4 py-3 mb-4'
+              style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)' }}
+            >
+              <p className='text-xs font-semibold mb-2' style={{ color: 'var(--color-text-muted)' }}>
+                Puntos adicionales
+              </p>
+              <div className='flex items-center justify-between mb-2'>
+                <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
+                  Posiciones en grupos
+                </span>
+                <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  {bonusPoints.totalGsp} pts
+                </span>
+              </div>
+              {bonusPoints.scoredGroups.length > 0 && (
+                <div className='flex flex-wrap gap-1.5 mb-2'>
+                  {bonusPoints.scoredGroups.map(([group, pts]) => (
+                    <span
+                      key={group}
+                      className='text-[11px] px-2 py-0.5 rounded-full'
+                      style={{
+                        background: pts > 0 ? 'rgba(212,168,67,0.12)' : 'var(--color-surface)',
+                        color: pts > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                        border: `1px solid ${pts > 0 ? 'rgba(212,168,67,0.3)' : 'var(--color-border)'}`,
+                      }}
+                    >
+                      Grupo {group}: <strong>{pts}</strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div
+                className='flex items-center justify-between pt-2'
+                style={{ borderTop: '1px solid var(--color-border)' }}
+              >
+                <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
+                  Equipos clasificados
+                </span>
+                <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  {bonusPoints.totalAdv} pts
+                </span>
+              </div>
+            </div>
+          )}
 
           {matchesLoading ? (
             Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
