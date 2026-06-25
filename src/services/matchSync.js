@@ -102,9 +102,25 @@ function normalizeMatch(apiMatch) {
     scoreB: apiMatch.score?.fullTime?.away ?? null,
     // 'home' or 'away' — set by API when match goes to penalties; null for normal outcomes
     winner: apiMatch.score?.winner === 'HOME_TEAM' ? 'home' : apiMatch.score?.winner === 'AWAY_TEAM' ? 'away' : null,
-    status: STATUS_MAP[apiMatch.status] || 'upcoming',
+    status: deriveStatus(STATUS_MAP[apiMatch.status] || 'upcoming', apiMatch.utcDate),
     lastSyncedAt: Timestamp.now(),
   };
+}
+
+// football-data.org delays live-status updates on basic plans — the match stays
+// TIMED/SCHEDULED until a goal triggers a webhook, so 0-0 games never flip to
+// IN_PLAY. If the API still says 'upcoming' but kickoff is in the past (and the
+// match isn't marked finished), infer 'live'. We give a 115-minute window (90
+// min + extra time buffer) after which we stop inferring so we don't keep
+// stale matches as live if the API never updates them.
+function deriveStatus(apiStatus, utcDate) {
+  if (apiStatus !== 'upcoming') return apiStatus;
+  if (!utcDate) return apiStatus;
+  const kickoff = new Date(utcDate);
+  const now = new Date();
+  const minutesSinceKickoff = (now - kickoff) / 60000;
+  if (minutesSinceKickoff > 0 && minutesSinceKickoff < 115) return 'live';
+  return apiStatus;
 }
 
 // Returns the winning team TLA, handling penalty shootout results where fullTime is a draw
@@ -182,17 +198,30 @@ export async function syncMatchesFromAPI() {
         currentlyLive.push({ docId, ...normalized });
       }
 
+      const toWrite = { ...normalized };
+
       // If admin has manually overridden this match, don't clobber their scores/status/winner
       if (prev?.adminOverride) {
-        const safeNormalized = { ...normalized };
-        delete safeNormalized.scoreA;
-        delete safeNormalized.scoreB;
-        delete safeNormalized.status;
-        delete safeNormalized.winner;
-        batch.set(matchRef, safeNormalized, { merge: true });
-      } else {
-        batch.set(matchRef, normalized, { merge: true });
+        delete toWrite.scoreA;
+        delete toWrite.scoreB;
+        delete toWrite.status;
+        delete toWrite.winner;
       }
+
+      // Don't overwrite confirmed team assignments with empty values — the API
+      // sometimes returns blank homeTeam/awayTeam for knockout slots it hasn't
+      // populated yet, which would erase teams that were correctly placed on a
+      // prior sync.
+      if (!toWrite.tlaA && prev?.tlaA) delete toWrite.tlaA;
+      if (!toWrite.tlaB && prev?.tlaB) delete toWrite.tlaB;
+      if (!toWrite.teamA && prev?.teamA) delete toWrite.teamA;
+      if (!toWrite.teamB && prev?.teamB) delete toWrite.teamB;
+      if (!toWrite.flagA && prev?.flagA) delete toWrite.flagA;
+      if (!toWrite.flagB && prev?.flagB) delete toWrite.flagB;
+      if (!toWrite.crestA && prev?.crestA) delete toWrite.crestA;
+      if (!toWrite.crestB && prev?.crestB) delete toWrite.crestB;
+
+      batch.set(matchRef, toWrite, { merge: true });
     }
 
     await batch.commit();
