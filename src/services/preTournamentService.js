@@ -424,6 +424,14 @@ export function subscribeToBracket(userId, callback) {
   })
 }
 
+export function subscribeToAllBrackets(callback) {
+  return onSnapshot(collection(db, BRACKET_COLLECTION), snap => {
+    const map = {};
+    snap.forEach(d => { map[d.id] = d.data(); });
+    callback(map);
+  });
+}
+
 /**
  * Save a single bracket pick (one knockout match winner).
  * Stored flat to avoid Firestore merge issues with nested maps.

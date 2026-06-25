@@ -1,7 +1,28 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
+import { subscribeToAllBrackets } from '../services/preTournamentService';
 import { tlaLabel } from '../utils/teamLabels';
+
+// Compute bonus breakdown from a preTournamentBracket doc
+function computeBonus(bracket) {
+  const adv = { roundOf32: 0, roundOf16: 0, quarterfinals: 0, semifinals: 0, final: 0 };
+  let gsp = 0, ksp = 0, other = 0;
+  if (!bracket) return { gsp, adv, totalAdv: 0, ksp, other };
+  for (const [key, val] of Object.entries(bracket)) {
+    if (key.startsWith('gsp_') && !key.includes('_done')) gsp += val || 0;
+    else if (key.startsWith('ksp_')) ksp += val || 0;
+    else if (key.startsWith('adv_')) {
+      for (const stage of Object.keys(adv)) {
+        if (key.startsWith(`adv_${stage}_`)) { adv[stage] += val || 0; break; }
+      }
+    }
+  }
+  other += bracket.tournamentOutcomePoints || 0;
+  other += bracket.awardPoints || 0;
+  const totalAdv = Object.values(adv).reduce((s, v) => s + v, 0);
+  return { gsp, adv, totalAdv, ksp, other };
+}
 
 const STAGE_LABELS = {
   roundOf32: 'Ronda de 32',
@@ -59,16 +80,13 @@ function ChangeIndicator({ change }) {
   return <span className='text-xs' style={{ color: 'var(--color-text-muted)', minWidth: '2rem' }}>—</span>;
 }
 
-function PlayerRow({ entry, rank, isCurrentUser, change }) {
+function PlayerRow({ entry, rank, isCurrentUser, change, onClick }) {
   return (
-    <div
-      className='flex items-center gap-2 px-3 py-3 rounded-xl mb-2 transition-colors'
+    <button
+      onClick={onClick}
+      className='w-full flex items-center gap-2 px-3 py-3 rounded-xl mb-2 transition-colors text-left'
       style={{
-        background: isCurrentUser
-          ? 'rgba(212,168,67,0.08)'
-          : rank <= 3
-            ? 'var(--color-surface-card)'
-            : 'var(--color-surface-card)',
+        background: isCurrentUser ? 'rgba(212,168,67,0.08)' : 'var(--color-surface-card)',
         border: isCurrentUser ? '1px solid rgba(212,168,67,0.3)' : '1px solid var(--color-border)',
       }}
     >
@@ -91,7 +109,7 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
         </div>
       )}
 
-      {/* Name + hit breakdown */}
+      {/* Name + bonus breakdown */}
       <div className='flex-1 min-w-0'>
         <p
           className='font-semibold text-sm truncate'
@@ -104,22 +122,12 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
             </span>
           )}
         </p>
-        <p
-          className='text-[11px] mt-0.5 flex items-center gap-1 whitespace-nowrap'
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          <span>
-            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.correctScores ?? 0}</span>{' '}
-            correctos
-          </span>
+        <p className='text-[11px] mt-0.5 flex items-center gap-1 whitespace-nowrap' style={{ color: 'var(--color-text-muted)' }}>
+          <span><span style={{ color: 'var(--color-gold)', fontWeight: 600 }}>{entry.exactScores ?? 0}</span> exactos</span>
           <span style={{ opacity: 0.4 }}>·</span>
-          <span>
-            <span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.goalDiffScores ?? 0}</span> DG
-          </span>
+          <span><span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.goalDiffScores ?? 0}</span> DG</span>
           <span style={{ opacity: 0.4 }}>·</span>
-          <span>
-            <span style={{ color: 'var(--color-gold)', fontWeight: 600 }}>{entry.exactScores ?? 0}</span> exactos
-          </span>
+          <span><span style={{ color: 'var(--color-text-secondary)', fontWeight: 600 }}>{entry.correctScores ?? 0}</span> correctos</span>
         </p>
       </div>
 
@@ -131,14 +139,14 @@ function PlayerRow({ entry, rank, isCurrentUser, change }) {
         <span
           className='text-lg font-bold'
           style={{
-            color: rank === 1 ? 'var(--color-gold)' : isCurrentUser ? 'var(--color-gold)' : 'var(--color-text-primary)',
+            color: rank === 1 || isCurrentUser ? 'var(--color-gold)' : 'var(--color-text-primary)',
             fontFamily: 'var(--font-display)',
           }}
         >
           {entry.totalPoints ?? 0}
         </span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -247,9 +255,104 @@ function ResultRow({ match, prediction }) {
   );
 }
 
+const ADV_STAGES = [
+  { stage: 'roundOf32',     label: 'Clasificados 16vos', trigger: 'group' },
+  { stage: 'roundOf16',     label: 'Clasificados 8vos',  trigger: 'roundOf32' },
+  { stage: 'quarterfinals', label: 'Clasificados 4tos',  trigger: 'roundOf16' },
+  { stage: 'semifinals',    label: 'Clasificados SF',     trigger: 'quarterfinals' },
+  { stage: 'final',         label: 'Clasificados Final',  trigger: 'semifinals' },
+];
+
+function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedStages, matchPts, onClose }) {
+  const bonus = computeBonus(bracketData);
+  const anyGroupBonus = bonus.gsp > 0 || bonus.totalAdv > 0;
+
+  return (
+    <div
+      className='fixed inset-0 z-50 flex items-end sm:items-center justify-center'
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={onClose}
+    >
+      <div
+        className='w-full max-w-lg rounded-t-3xl sm:rounded-2xl overflow-hidden'
+        style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-border)', maxHeight: '85dvh', overflowY: 'auto' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className='flex items-center gap-3 px-4 pt-4 pb-3' style={{ borderBottom: '1px solid var(--color-border)' }}>
+          {entry.photoURL ? (
+            <img src={entry.photoURL} alt='' className='w-10 h-10 rounded-full object-cover shrink-0' style={{ border: '2px solid var(--color-border)' }} />
+          ) : (
+            <div className='w-10 h-10 rounded-full flex items-center justify-center text-base font-bold shrink-0' style={{ background: 'var(--color-pitch)', color: 'var(--color-gold)' }}>
+              {entry.name?.[0] || '?'}
+            </div>
+          )}
+          <div className='flex-1 min-w-0'>
+            <p className='font-semibold truncate' style={{ color: 'var(--color-text-primary)' }}>{entry.name || 'Jugador'}</p>
+            <p className='text-xs' style={{ color: 'var(--color-text-muted)' }}>#{rank} de {totalPlayers}</p>
+          </div>
+          <div className='text-right shrink-0'>
+            <p className='text-2xl font-bold' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>{entry.totalPoints ?? 0}</p>
+            <p className='text-[10px]' style={{ color: 'var(--color-text-muted)' }}>pts totales</p>
+          </div>
+        </div>
+
+        {/* Breakdown */}
+        <div className='px-4 py-3 flex flex-col gap-0'>
+          {/* Match predictions */}
+          <p className='text-[10px] font-semibold uppercase tracking-wide mb-2 mt-1' style={{ color: 'var(--color-text-muted)' }}>Partidos</p>
+          <Row label='Partidos en grupos' pts={matchPts} />
+          {/* Future knockout match rows — shown when those stages have matches */}
+          {['roundOf32','roundOf16','quarterfinals','semifinals','thirdPlace','final'].map(stage =>
+            finishedStages.has(stage) ? (
+              <Row key={stage} label={STAGE_LABELS[stage]} pts={bonus.ksp} />
+            ) : null
+          )}
+
+          {/* Bonus */}
+          {anyGroupBonus && (
+            <>
+              <p className='text-[10px] font-semibold uppercase tracking-wide mb-2 mt-4' style={{ color: 'var(--color-text-muted)' }}>Adicionales</p>
+              {bonus.gsp > 0 && <Row label='Posiciones en grupos' pts={bonus.gsp} gold />}
+              {ADV_STAGES.map(({ stage, label, trigger }) =>
+                finishedStages.has(trigger) && bonus.adv[stage] !== undefined ? (
+                  <Row key={stage} label={label} pts={bonus.adv[stage]} gold />
+                ) : null
+              )}
+            </>
+          )}
+        </div>
+
+        <div className='px-4 pb-4'>
+          <button
+            onClick={onClose}
+            className='w-full mt-2 py-2.5 rounded-xl text-sm font-semibold'
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, pts, gold }) {
+  return (
+    <div className='flex items-center justify-between py-2' style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+      <span className='text-sm font-bold tabular-nums' style={{ color: gold ? 'var(--color-gold)' : 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+        {pts ?? 0}
+      </span>
+    </div>
+  );
+}
+
 export default function LeaderboardPage() {
   const { user } = useAuth();
   const [view, setView] = useState('ranking'); // 'ranking' | 'resultados'
+  const [allBrackets, setAllBrackets] = useState({});
+  const [selectedPlayer, setSelectedPlayer] = useState(null); // { entry, rank }
 
   // All shared data (leaderboard, ranks, matches, the user's predictions) comes from
   // the single TournamentData subscription so it can't drift from the other pages.
@@ -265,6 +368,8 @@ export default function LeaderboardPage() {
     currentUserRank,
     me,
   } = useTournamentData();
+
+  useEffect(() => subscribeToAllBrackets(setAllBrackets), []);
 
   // Which stages have at least one finished match (controls which adv rows are visible)
   const finishedStages = useMemo(() => {
@@ -301,10 +406,7 @@ export default function LeaderboardPage() {
     .filter((m) => m.status === 'finished')
     .sort((a, b) => (b.date?.toDate?.() || 0) - (a.date?.toDate?.() || 0));
 
-  const matchPts = useMemo(
-    () => pastMatches.reduce((s, m) => s + (userPreds[m.id]?.pointsEarned ?? 0), 0),
-    [pastMatches, userPreds],
-  );
+
 
   // Group finished matches by stage section, in display order
   const STAGE_SECTIONS = [
@@ -369,6 +471,21 @@ export default function LeaderboardPage() {
   const diffLeader = leaderOf('goalDiffScores');
   const correctLeader = leaderOf('correctScores');
 
+  const additionalLeader = useMemo(() => {
+    if (players.length === 0) return null;
+    return players.reduce((best, p) => {
+      const b = computeBonus(allBrackets[p.id]);
+      const bestB = computeBonus(allBrackets[best?.id]);
+      return (b.gsp + b.totalAdv) > (bestB.gsp + bestB.totalAdv) ? p : best;
+    }, players[0]);
+  }, [players, allBrackets]);
+
+  const additionalLeaderTotal = useMemo(() => {
+    if (!additionalLeader) return 0;
+    const b = computeBonus(allBrackets[additionalLeader.id]);
+    return b.gsp + b.totalAdv;
+  }, [additionalLeader, allBrackets]);
+
   return (
     <div className='max-w-lg mx-auto px-4 pt-4'>
       <h1
@@ -421,6 +538,7 @@ export default function LeaderboardPage() {
                 rank={ranks[i]}
                 isCurrentUser={player.id === user?.uid}
                 change={rankChange[player.id] ?? null}
+                onClick={() => setSelectedPlayer({ entry: player, rank: ranks[i] })}
               />
             ))
           )}
@@ -443,7 +561,8 @@ export default function LeaderboardPage() {
                 { label: 'Marcador Exacto', sublabel: 'exactos', icon: '🎯', key: 'exactScores', leader: exactLeader, color: 'var(--color-gold)' },
                 { label: 'Diferencia de Goles', sublabel: 'DG', icon: '📐', key: 'goalDiffScores', leader: diffLeader, color: 'var(--color-text-primary)' },
                 { label: 'Resultado Correcto', sublabel: 'correctos', icon: '✅', key: 'correctScores', leader: correctLeader, color: '#4caf72' },
-              ].map(({ label, sublabel, icon, key, leader, color }) => (
+                ...(additionalLeaderTotal > 0 ? [{ label: 'Puntos Adicionales', sublabel: 'adicionales', icon: '⭐', key: '_adicionales', leader: additionalLeader, color: 'var(--color-gold)', overrideVal: additionalLeaderTotal }] : []),
+              ].map(({ label, sublabel, icon, key, leader, color, overrideVal }) => (
                 <div
                   key={key}
                   className='flex items-center gap-3 rounded-2xl px-4 py-3'
@@ -470,7 +589,7 @@ export default function LeaderboardPage() {
                   </div>
                   <div className='text-right shrink-0'>
                     <p className='text-2xl font-bold' style={{ color, fontFamily: 'var(--font-display)' }}>
-                      {leader?.[key] ?? 0}
+                      {overrideVal ?? (leader?.[key] ?? 0)}
                     </p>
                     <p className='text-[10px]' style={{ color: 'var(--color-text-muted)' }}>{sublabel}</p>
                   </div>
@@ -637,6 +756,15 @@ export default function LeaderboardPage() {
               {sortedSections.map(({ key, label }) => {
                 const sectionMatches = matchesByStage[key];
                 const sectionPts = sectionMatches.reduce((s, m) => s + (userPreds[m.id]?.pointsEarned ?? 0), 0);
+                const exact = sectionMatches.filter(m => userPreds[m.id]?.isExact).length;
+                const gd = sectionMatches.filter(m => {
+                  const p = userPreds[m.id];
+                  return p && !p.isExact && p.resultTier === 2;
+                }).length;
+                const correct = sectionMatches.filter(m => {
+                  const p = userPreds[m.id];
+                  return p && !p.isExact && p.resultTier >= 1;
+                }).length;
                 const isOpen = openSections[key];
                 return (
                   <div key={key} className='mb-4'>
@@ -644,7 +772,7 @@ export default function LeaderboardPage() {
                       onClick={() => toggleSection(key)}
                       className='w-full flex items-center justify-between mb-2 pr-4'
                     >
-                      <div className='flex items-center gap-2'>
+                      <div className='flex items-center gap-2 min-w-0'>
                         <svg
                           className='w-4 h-4 transition-transform shrink-0'
                           style={{ color: 'var(--color-text-muted)', transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
@@ -652,11 +780,16 @@ export default function LeaderboardPage() {
                         >
                           <path d='M6 9l6 6 6-6' />
                         </svg>
-                        <span className='text-xs font-semibold uppercase tracking-wide' style={{ color: 'var(--color-text-muted)' }}>
+                        <span className='text-xs font-semibold uppercase tracking-wide shrink-0' style={{ color: 'var(--color-text-muted)' }}>
                           {label}
                         </span>
+                        <span className='flex items-center gap-1 text-[11px] whitespace-nowrap' style={{ color: 'var(--color-text-muted)' }}>
+                          {correct > 0 && <span style={{ color: 'var(--color-text-secondary)' }}>{correct}✓</span>}
+                          {gd > 0 && <span style={{ color: 'var(--color-text-secondary)' }}>{gd}DG</span>}
+                          {exact > 0 && <span style={{ color: 'var(--color-gold)', fontWeight: 600 }}>{exact}🎯</span>}
+                        </span>
                       </div>
-                      <div className='flex flex-col items-end leading-none'>
+                      <div className='flex flex-col items-end leading-none shrink-0'>
                         <span className='text-lg font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
                           {sectionPts}
                         </span>
@@ -673,6 +806,26 @@ export default function LeaderboardPage() {
           )}
         </>
       )}
+
+      {/* Player detail modal */}
+      {selectedPlayer && (() => {
+        const { entry, rank } = selectedPlayer;
+        const bracket = allBrackets[entry.id];
+        const bonus = computeBonus(bracket);
+        const bonusTotal = bonus.gsp + bonus.totalAdv + bonus.ksp + bonus.other;
+        const mPts = (entry.totalPoints ?? 0) - bonusTotal;
+        return (
+          <PlayerDetailModal
+            entry={entry}
+            bracketData={bracket}
+            rank={rank}
+            totalPlayers={players.length}
+            finishedStages={finishedStages}
+            matchPts={mPts}
+            onClose={() => setSelectedPlayer(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
