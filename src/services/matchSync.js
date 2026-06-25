@@ -246,7 +246,7 @@ export async function syncMatchesFromAPI() {
 
     // Sweep for groups that are fully finished but whose standings weren't scored yet
     // (handles the case where pointsCalculated was set before calculateGroupStandingsPoints ran).
-    // Safe to call repeatedly — the function guards against double-runs via gsp_X_done.
+    // Safe to call repeatedly — the function re-writes the same values, which is idempotent.
     const groupsToCheck = new Set();
     for (const m of Object.values(existing)) {
       if (m.stage === 'group' && m.group && m.status === 'finished') groupsToCheck.add(m.group);
@@ -393,11 +393,6 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
 
 // Group final standings scoring — called after all 6 matches in a group finish
 async function calculateGroupStandingsPoints(group) {
-  // Guard against double-run
-  const scoreStateRef = doc(db, 'config', 'scoringState');
-  const scoreStateSnap = await getDoc(scoreStateRef);
-  if (scoreStateSnap.data()?.[`gsp_${group}_done`]) return;
-
   // Fetch all matches in this group
   const matchesSnap = await getDocs(
     query(collection(db, 'matches'), where('stage', '==', 'group'), where('group', '==', group)),
@@ -466,9 +461,6 @@ async function calculateGroupStandingsPoints(group) {
   }
 
   await batch.commit();
-  // Mark done AFTER the batch so a failed batch doesn't permanently block re-runs
-  await setDoc(scoreStateRef, { [`gsp_${group}_done`]: true }, { merge: true });
-
   await recalcUsers(affectedUserIds);
 
   // Once all 12 groups are done, score best-3rd place R32 advancement
@@ -479,11 +471,7 @@ async function calculateGroupStandingsPoints(group) {
 async function calculateBest3rdAdvancementIfReady() {
   const scoreStateRef = doc(db, 'config', 'scoringState');
   const scoreStateSnap = await getDoc(scoreStateRef);
-  const scoreState = scoreStateSnap.data() || {};
-
-  const allGroups = 'ABCDEFGHIJKL'.split('');
-  if (!allGroups.every((g) => scoreState[`gsp_${g}_done`])) return;
-  if (scoreState['best3rd_done']) return;
+  if (scoreStateSnap.data()?.['best3rd_done']) return;
 
   // Fetch all group matches to compute actual standings per group
   const allGroupMatchesSnap = await getDocs(query(collection(db, 'matches'), where('stage', '==', 'group')));
@@ -493,6 +481,13 @@ async function calculateBest3rdAdvancementIfReady() {
     if (!matchesByGroup[data.group]) matchesByGroup[data.group] = [];
     matchesByGroup[data.group].push({ id: d.id, ...data });
   });
+
+  // Only proceed when all 12 groups have all 6 matches finished
+  const allGroups = 'ABCDEFGHIJKL'.split('');
+  const allDone = allGroups.every(
+    (g) => matchesByGroup[g]?.length === 6 && matchesByGroup[g].every((m) => m.status === 'finished'),
+  );
+  if (!allDone) return;
 
   const allActualStandings = {};
   for (const [g, gMatches] of Object.entries(matchesByGroup)) {
