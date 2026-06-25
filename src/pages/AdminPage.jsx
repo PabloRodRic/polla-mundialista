@@ -29,7 +29,7 @@ import {
 import { hasApiKey } from '../services/footballApi';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
-import { fetchMatchPredictionStatus, fetchPronosticoCompletion } from '../services/preTournamentService';
+import { fetchMatchPredictionStatus } from '../services/preTournamentService';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 
 // Collapsible card wrapper — keeps the admin top section compact. Collapsed by default.
@@ -520,127 +520,6 @@ function AwardsCard({ onSave }) {
   );
 }
 
-// Lists every user's "Pronóstico" completion (groups / bracket / awards) so the
-// admin can chase whoever hasn't finished. One-time fetch with manual refresh —
-// resolving everyone's bracket is heavy, so we don't subscribe live.
-function PronosticoStatusCard() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  function load() {
-    setLoading(true);
-    fetchPronosticoCompletion()
-      .then(setRows)
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false));
-  }
-
-  // Initial fetch — set state only in the async callbacks so the effect body
-  // doesn't trigger a synchronous setState/cascading render.
-  useEffect(() => {
-    let active = true;
-    fetchPronosticoCompletion()
-      .then((d) => active && setRows(d))
-      .catch(() => active && setRows([]))
-      .finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const completed = rows.filter((r) => r.complete).length;
-
-  function badge(ok, label) {
-    return (
-      <span
-        className='text-[10px] px-1.5 py-0.5 rounded font-medium'
-        style={{
-          background: ok ? 'rgba(13,107,63,0.18)' : 'rgba(231,76,60,0.12)',
-          color: ok ? 'var(--color-pitch-light)' : 'var(--color-accent-red)',
-        }}
-      >
-        {ok ? '✓' : '✗'} {label}
-      </span>
-    );
-  }
-
-  return (
-    <Accordion title='Estado de Pronósticos'>
-      <div className='flex items-center justify-end mb-3'>
-        <div className='flex items-center gap-2'>
-          {!loading && (
-            <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-              {completed}/{rows.length} completos
-            </span>
-          )}
-          <button
-            onClick={load}
-            disabled={loading}
-            className='text-xs px-2 py-1 rounded-lg transition-opacity'
-            style={{
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-secondary)',
-              border: '1px solid var(--color-border)',
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? '...' : '↻'}
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <p className='text-sm text-center py-4' style={{ color: 'var(--color-text-muted)' }}>
-          Cargando...
-        </p>
-      ) : rows.length === 0 ? (
-        <p className='text-sm text-center py-4' style={{ color: 'var(--color-text-muted)' }}>
-          No hay usuarios.
-        </p>
-      ) : (
-        <ul className='flex flex-col gap-1.5'>
-          {rows.map((r) => (
-            <li
-              key={r.userId}
-              className='flex items-center gap-2.5 rounded-xl px-2.5 py-2'
-              style={{
-                background: 'var(--color-surface)',
-                border: `1px solid ${r.complete ? 'var(--color-border)' : 'rgba(231,76,60,0.35)'}`,
-              }}
-            >
-              {r.photoURL ? (
-                <img src={r.photoURL} alt={r.name} className='w-7 h-7 rounded-full object-cover shrink-0' />
-              ) : (
-                <div
-                  className='w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0'
-                  style={{ background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)' }}
-                >
-                  {(r.name?.[0] || '?').toUpperCase()}
-                </div>
-              )}
-              <div className='min-w-0 flex-1'>
-                <p className='text-sm font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
-                  {r.name}
-                </p>
-                <div className='flex flex-wrap items-center gap-1 mt-1'>
-                  {badge(r.groupsComplete, `Grupos ${r.predictedGroups}/${r.totalGroups}`)}
-                  {badge(r.bracketComplete, 'Llaves')}
-                  {badge(r.awardsComplete, 'Premios')}
-                </div>
-              </div>
-              <span
-                className='text-lg shrink-0'
-                style={{ color: r.complete ? 'var(--color-pitch-light)' : 'var(--color-accent-red)' }}
-              >
-                {r.complete ? '✓' : '•'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Accordion>
-  );
-}
 
 export default function AdminPage() {
   const { profile } = useAuth();
@@ -923,9 +802,6 @@ export default function AdminPage() {
 
       {/* Individual awards */}
       <AwardsCard onSave={(msg, type) => showToast(msg, type)} />
-
-      {/* Pronóstico completion per user */}
-      <PronosticoStatusCard />
 
       {/* Manual overrides */}
       <h2 className='text-sm font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-text-muted)' }}>

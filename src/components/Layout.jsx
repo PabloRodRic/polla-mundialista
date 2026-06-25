@@ -14,8 +14,8 @@ import { APP_VERSION } from '../version';
 
 const NAV_TABS = [
   { path: '/partidos', icon: MatchesIcon, label: 'Partidos' },
-  { path: '/pronostico', icon: BetsIcon, label: 'Pronóstico' },
   { path: '/grupos', icon: GroupsIcon, label: 'Grupos' },
+  { path: '/pronostico', icon: BetsIcon, label: 'Pronóstico' },
   { path: '/predicciones', icon: KnockoutsIcon, label: 'Llaves' },
   { path: '/tabla', icon: LeaderboardIcon, label: 'Tabla' },
 ];

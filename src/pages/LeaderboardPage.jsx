@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
@@ -266,23 +266,32 @@ export default function LeaderboardPage() {
     me,
   } = useTournamentData();
 
+  // Which stages have at least one finished match (controls which adv rows are visible)
+  const finishedStages = useMemo(() => {
+    const s = new Set();
+    for (const m of matches) {
+      if (m.status === 'finished' && m.stage) s.add(m.stage);
+    }
+    return s;
+  }, [matches]);
+
   // Bonus points breakdown derived from the bracket document
   const bonusPoints = useMemo(() => {
     if (!myBracket) return null;
     const groups = {};
-    let totalAdv = 0;
+    const adv = { roundOf32: 0, roundOf16: 0, quarterfinals: 0, semifinals: 0, final: 0 };
     for (const [key, val] of Object.entries(myBracket)) {
       if (key.startsWith('gsp_') && key.length === 5) {
-        const group = key[4]; // 'A'–'L'
-        groups[group] = (groups[group] || 0) + (val || 0);
+        groups[key[4]] = (groups[key[4]] || 0) + (val || 0);
       }
-      if (key.startsWith('adv_')) totalAdv += val || 0;
+      for (const stage of Object.keys(adv)) {
+        if (key.startsWith(`adv_${stage}_`)) adv[stage] += val || 0;
+      }
     }
-    const scoredGroups = Object.entries(groups)
-      .filter(([, pts]) => pts !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b));
+    const scoredGroups = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
     const totalGsp = scoredGroups.reduce((s, [, pts]) => s + pts, 0);
-    return { scoredGroups, totalGsp, totalAdv };
+    const totalAdv = Object.values(adv).reduce((s, v) => s + v, 0);
+    return { scoredGroups, totalGsp, adv, totalAdv };
   }, [myBracket]);
 
   const loading = playersLoading;
@@ -291,6 +300,63 @@ export default function LeaderboardPage() {
   const pastMatches = matches
     .filter((m) => m.status === 'finished')
     .sort((a, b) => (b.date?.toDate?.() || 0) - (a.date?.toDate?.() || 0));
+
+  const matchPts = useMemo(
+    () => pastMatches.reduce((s, m) => s + (userPreds[m.id]?.pointsEarned ?? 0), 0),
+    [pastMatches, userPreds],
+  );
+
+  // Group finished matches by stage section, in display order
+  const STAGE_SECTIONS = [
+    { key: 'group',         label: 'Partidos en Grupos' },
+    { key: 'roundOf32',     label: '16vos de Final' },
+    { key: 'roundOf16',     label: '8vos de Final' },
+    { key: 'quarterfinals', label: 'Cuartos de Final' },
+    { key: 'semifinals',    label: 'Semifinales' },
+    { key: 'thirdPlace',    label: 'Tercer Puesto' },
+    { key: 'final',         label: 'Final' },
+  ];
+
+  const matchesByStage = useMemo(() => {
+    const map = {};
+    for (const { key } of STAGE_SECTIONS) map[key] = [];
+    for (const m of pastMatches) {
+      if (map[m.stage]) map[m.stage].push(m);
+    }
+    return map;
+  }, [pastMatches]);
+
+  // Most recent stage that has finished matches — drives sort order and default open state
+  const activeStage = useMemo(() => {
+    for (const { key } of [...STAGE_SECTIONS].reverse()) {
+      if (matchesByStage[key]?.length > 0) return key;
+    }
+    return 'group';
+  }, [matchesByStage]);
+
+  // Sections that have matches, most recent first
+  const sortedSections = useMemo(() =>
+    STAGE_SECTIONS.filter(s => matchesByStage[s.key]?.length > 0).reverse(),
+  [matchesByStage]);
+
+  const [openSections, setOpenSections] = useState(() => ({
+    group: true, roundOf32: true, roundOf16: true, quarterfinals: true, semifinals: true, thirdPlace: true, final: true,
+  }));
+
+  // When a new round becomes active, open it and collapse all earlier rounds
+  useEffect(() => {
+    setOpenSections(prev => {
+      const next = { ...prev };
+      for (const { key } of STAGE_SECTIONS) {
+        next[key] = key === activeStage;
+      }
+      return next;
+    });
+  }, [activeStage]);
+
+  const toggleSection = useCallback((key) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   const TABS = [
     { key: 'ranking', label: 'Tabla' },
@@ -491,7 +557,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
 
-          {/* Bonus points: group standings + team advancement */}
+          {/* Bonus points: group standings + advancement per round */}
           {bonusPoints && bonusPoints.scoredGroups.length > 0 && (
             <div
               className='rounded-2xl px-4 py-3 mb-4'
@@ -500,41 +566,61 @@ export default function LeaderboardPage() {
               <p className='text-xs font-semibold mb-2' style={{ color: 'var(--color-text-muted)' }}>
                 Puntos adicionales
               </p>
-              <div className='flex items-center justify-between mb-2'>
-                <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
-                  Posiciones en grupos
-                </span>
+
+              {/* Group standings */}
+              <div className='flex items-center justify-between mb-1'>
+                <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>Posiciones en grupos</span>
                 <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                  {bonusPoints.totalGsp} pts
+                  {bonusPoints.totalGsp}
                 </span>
               </div>
-              {bonusPoints.scoredGroups.length > 0 && (
-                <div className='flex flex-wrap gap-1.5 mb-2'>
-                  {bonusPoints.scoredGroups.map(([group, pts]) => (
-                    <span
-                      key={group}
-                      className='text-[11px] px-2 py-0.5 rounded-full'
-                      style={{
-                        background: pts > 0 ? 'rgba(212,168,67,0.12)' : 'var(--color-surface)',
-                        color: pts > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)',
-                        border: `1px solid ${pts > 0 ? 'rgba(212,168,67,0.3)' : 'var(--color-border)'}`,
-                      }}
-                    >
-                      Grupo {group}: <strong>{pts}</strong>
+              <div className='flex flex-wrap gap-1.5 mb-3'>
+                {bonusPoints.scoredGroups.map(([group, pts]) => (
+                  <span
+                    key={group}
+                    className='text-[11px] px-2 py-0.5 rounded-full'
+                    style={{
+                      background: pts > 0 ? 'rgba(212,168,67,0.12)' : 'var(--color-surface)',
+                      color: pts > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                      border: `1px solid ${pts > 0 ? 'rgba(212,168,67,0.3)' : 'var(--color-border)'}`,
+                    }}
+                  >
+                    {group}: {pts}
+                  </span>
+                ))}
+              </div>
+
+              {/* Advancement rows — one per round, only shown when that round has started */}
+              {[
+                { stage: 'roundOf32',     label: 'Clasificados a 16vos', trigger: 'group' },
+                { stage: 'roundOf16',     label: 'Clasificados a 8vos',  trigger: 'roundOf32' },
+                { stage: 'quarterfinals', label: 'Clasificados a 4tos',  trigger: 'roundOf16' },
+                { stage: 'semifinals',    label: 'Clasificados a SF',     trigger: 'quarterfinals' },
+                { stage: 'final',         label: 'Clasificados a Final',  trigger: 'semifinals' },
+              ].map(({ stage, label, trigger }) =>
+                finishedStages.has(trigger) ? (
+                  <div
+                    key={stage}
+                    className='flex items-center justify-between pt-2'
+                    style={{ borderTop: '1px solid var(--color-border)' }}
+                  >
+                    <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+                    <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                      {bonusPoints.adv[stage]}
                     </span>
-                  ))}
-                </div>
+                  </div>
+                ) : null
               )}
-              <div
-                className='flex items-center justify-between pt-2'
-                style={{ borderTop: '1px solid var(--color-border)' }}
-              >
-                <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>
-                  Equipos clasificados
-                </span>
-                <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                  {bonusPoints.totalAdv} pts
-                </span>
+
+              {/* Grand total */}
+              <div className='flex items-center justify-between pt-2 mt-1' style={{ borderTop: '1px solid var(--color-border)' }}>
+                <span className='text-sm font-semibold' style={{ color: 'var(--color-gold)' }}>Total adicionales</span>
+                <div className='flex flex-col items-end leading-none'>
+                  <span className='text-lg font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
+                    {bonusPoints.totalGsp + bonusPoints.totalAdv}
+                  </span>
+                  <span className='text-[10px] mt-0.5' style={{ color: 'var(--color-text-muted)' }}>pts</span>
+                </div>
               </div>
             </div>
           )}
@@ -547,7 +633,43 @@ export default function LeaderboardPage() {
               <p>Todavía no hay partidos finalizados.</p>
             </div>
           ) : (
-            pastMatches.map((m) => <ResultRow key={m.id} match={m} prediction={userPreds[m.id]} />)
+            <>
+              {sortedSections.map(({ key, label }) => {
+                const sectionMatches = matchesByStage[key];
+                const sectionPts = sectionMatches.reduce((s, m) => s + (userPreds[m.id]?.pointsEarned ?? 0), 0);
+                const isOpen = openSections[key];
+                return (
+                  <div key={key} className='mb-4'>
+                    <button
+                      onClick={() => toggleSection(key)}
+                      className='w-full flex items-center justify-between mb-2 pr-4'
+                    >
+                      <div className='flex items-center gap-2'>
+                        <svg
+                          className='w-4 h-4 transition-transform shrink-0'
+                          style={{ color: 'var(--color-text-muted)', transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+                          viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'
+                        >
+                          <path d='M6 9l6 6 6-6' />
+                        </svg>
+                        <span className='text-xs font-semibold uppercase tracking-wide' style={{ color: 'var(--color-text-muted)' }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div className='flex flex-col items-end leading-none'>
+                        <span className='text-lg font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
+                          {sectionPts}
+                        </span>
+                        <span className='text-[10px] mt-0.5' style={{ color: 'var(--color-text-muted)' }}>pts</span>
+                      </div>
+                    </button>
+                    {isOpen && sectionMatches.map((m) => (
+                      <ResultRow key={m.id} match={m} prediction={userPreds[m.id]} />
+                    ))}
+                  </div>
+                );
+              })}
+            </>
           )}
         </>
       )}
