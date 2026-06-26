@@ -442,7 +442,8 @@ async function calculateGroupStandingsPoints(group) {
 
   for (const [userId, userPreds] of Object.entries(predsByUser)) {
     const predictedStandings = computeGroupStandings(teams, groupMatches, userPreds);
-    const predictedQualifiers = new Set([predictedStandings[0]?.tla, predictedStandings[1]?.tla].filter(Boolean));
+    // Top 2 qualify directly; 3rd can qualify via best-3rd — all three count as "predicted to advance"
+    const predictedQualifiers = new Set([predictedStandings[0]?.tla, predictedStandings[1]?.tla, predictedStandings[2]?.tla].filter(Boolean));
 
     let standingPoints = 0;
     if (predictedStandings[0]?.tla === actualStandings[0]?.tla) standingPoints += fs.correct1stPlace;
@@ -526,8 +527,9 @@ async function calculateBest3rdAdvancementIfReady() {
 
     const userPreds = allPredsByUser[userId] || {};
 
-    // Compute predicted 3rd-place teams from each group
+    // Compute predicted 3rd-place teams from each group, and the predicted top-2 set
     const predictedThirdCandidates = [];
+    const predictedTop2Set = new Set();
     for (const [g, gMatches] of Object.entries(matchesByGroup)) {
       const teamMap = {};
       for (const m of gMatches) {
@@ -535,6 +537,8 @@ async function calculateBest3rdAdvancementIfReady() {
         teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB };
       }
       const standings = computeGroupStandings(Object.values(teamMap), gMatches, userPreds);
+      if (standings[0]) predictedTop2Set.add(standings[0].tla);
+      if (standings[1]) predictedTop2Set.add(standings[1].tla);
       if (standings[2]) predictedThirdCandidates.push({ ...standings[2], fromGroup: g });
     }
 
@@ -553,7 +557,8 @@ async function calculateBest3rdAdvancementIfReady() {
 
     const updates = {};
     for (const tla of actualBest3rdSet) {
-      updates[`adv_roundOf32_${tla}`] = predictedBest3rdSet.has(tla) ? advR32Pts : 0;
+      // Credit users who predicted the team to advance either as a best-3rd OR in their group's top 2
+      updates[`adv_roundOf32_${tla}`] = (predictedBest3rdSet.has(tla) || predictedTop2Set.has(tla)) ? advR32Pts : 0;
     }
     if (Object.keys(updates).length > 0) {
       batch.update(bracketDoc.ref, updates);

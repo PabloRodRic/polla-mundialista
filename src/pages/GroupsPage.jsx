@@ -66,9 +66,9 @@ function GroupCard({ group, matches, groupPreds, myBracket }) {
     return map;
   }, [predictedStandings]);
 
-  // Teams the user predicted to qualify (top 2)
+  // Teams the user predicted to advance to R32 — top 2 (direct) or 3rd (best-3rd route)
   const userPredictedQualifiers = useMemo(() => {
-    return new Set([predictedStandings[0]?.tla, predictedStandings[1]?.tla].filter(Boolean));
+    return new Set([predictedStandings[0]?.tla, predictedStandings[1]?.tla, predictedStandings[2]?.tla].filter(Boolean));
   }, [predictedStandings]);
 
   const allDone = matches.length === 6 && matches.every(m => m.status === 'finished');
@@ -297,8 +297,9 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
   if (thirds.length === 0) return null;
 
   // Predicted 3rd-place teams per group (user's perspective)
-  const userPredicted3rdQualifiers = useMemo(() => {
-    const candidates = [];
+  const userPredictedR32Qualifiers = useMemo(() => {
+    const thirdCandidates = [];
+    const top2Set = new Set();
     for (const g of ALL_GROUPS) {
       const gMatches = matchesByGroup[g] || [];
       if (gMatches.length === 0) continue;
@@ -308,10 +309,12 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
         teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB, crest: m.crestB };
       }
       const standings = computeGroupStandings(Object.values(teamMap), gMatches, groupPreds);
-      if (standings[2]) candidates.push({ ...standings[2], fromGroup: g });
+      if (standings[0]) top2Set.add(standings[0].tla);
+      if (standings[1]) top2Set.add(standings[1].tla);
+      if (standings[2]) thirdCandidates.push({ ...standings[2], fromGroup: g });
     }
-    return new Set(
-      candidates
+    const best3rdSet = new Set(
+      thirdCandidates
         .sort((a, b) => {
           if (b.pts !== a.pts) return b.pts - a.pts;
           if (b.gd !== a.gd) return b.gd - a.gd;
@@ -321,6 +324,8 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
         .slice(0, 8)
         .map(t => t.tla)
     );
+    // A user "predicted" a best-3rd to advance if they had them in top 2 OR among their best 8 thirds
+    return { best3rdSet, top2Set };
   }, [matchesByGroup, groupPreds]);
 
   return (
@@ -370,7 +375,7 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
 
       {thirds.map((team, i) => {
         const qualifies = i < 8;
-        const userPicked = userPredicted3rdQualifiers.has(team.tla);
+        const userPicked = userPredictedR32Qualifiers.best3rdSet.has(team.tla) || userPredictedR32Qualifiers.top2Set.has(team.tla);
         const advPts = myBracket?.[`adv_roundOf32_${team.tla}`];
         const advScored = advPts !== undefined;
 
