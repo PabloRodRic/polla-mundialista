@@ -4,8 +4,9 @@ import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
-import { fetchOthersBets } from '../services/preTournamentService';
+import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
+import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
 import PointsBadge from '../components/PointsBadge';
 
@@ -133,7 +134,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets, matchNumber }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -188,13 +189,15 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, matchNu
             </span>
           )}
           <BetsIconButton
-            onClick={() =>
-              onShowBets({
-                matchId: match.id,
-                type: 'live',
-                title: `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`,
-              })
-            }
+            disabled={!locked && !isAdmin}
+            onClick={() => {
+              const title = `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`;
+              if (isAdmin && !locked) {
+                onShowStatus({ matchId: match.id, title });
+              } else {
+                onShowBets({ matchId: match.id, type: 'live', title });
+              }
+            }}
           />
         </div>
       </div>
@@ -267,7 +270,8 @@ function SkeletonCard() {
 }
 
 export default function PredictionsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = !!profile?.isAdmin;
   // Shared subscription: all matches, the user's knockout predictions, and the
   // tournament-start date all live in TournamentData so they match the other pages.
   const {
@@ -281,7 +285,7 @@ export default function PredictionsPage() {
   const [filter, setFilter] = useState('upcoming');
   const debounceRef = useRef({});
 
-  // "Ver pronósticos de otros" popup
+  // "Ver pronósticos de otros" popup (post-lock, all users)
   const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'live' });
   const [betsData, setBetsData] = useState([]);
   const [betsLoading, setBetsLoading] = useState(false);
@@ -294,6 +298,21 @@ export default function PredictionsPage() {
       .then(setBetsData)
       .catch(() => setBetsData([]))
       .finally(() => setBetsLoading(false));
+  }
+
+  // Admin-only "who's missing" popup (pre-lock)
+  const [statusModal, setStatusModal] = useState({ open: false, title: '' });
+  const [statusRows, setStatusRows] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  function openStatus({ matchId, title }) {
+    setStatusModal({ open: true, title });
+    setStatusRows([]);
+    setStatusLoading(true);
+    fetchMatchPredictionStatus(matchId)
+      .then(setStatusRows)
+      .catch(() => setStatusRows([]))
+      .finally(() => setStatusLoading(false));
   }
 
   // This tab only predicts knockout fixtures.
@@ -466,7 +485,9 @@ export default function PredictionsPage() {
                   onSave={savePrediction}
                   saving={saving[m.id] ?? false}
                   onShowBets={openBets}
+                  onShowStatus={openStatus}
                   matchNumber={matchNumberById[m.id]}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
@@ -482,6 +503,13 @@ export default function PredictionsPage() {
         bets={betsData}
         loading={betsLoading}
         currentUserId={user?.uid}
+      />
+      <PredictionStatusModal
+        open={statusModal.open}
+        onClose={() => setStatusModal((m) => ({ ...m, open: false }))}
+        title={statusModal.title}
+        rows={statusRows}
+        loading={statusLoading}
       />
     </div>
   );
