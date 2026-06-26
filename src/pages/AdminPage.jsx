@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   collection,
   query,
@@ -27,6 +27,8 @@ import {
   getSyncStatus,
 } from '../services/matchSync';
 import { hasApiKey } from '../services/footballApi';
+import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
+import { BRACKET_R32, getR32Teams, SLOT_LABEL } from '../utils/bracketUtils';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
 import { fetchMatchPredictionStatus } from '../services/preTournamentService';
@@ -521,6 +523,237 @@ function AwardsCard({ onSave }) {
 }
 
 
+function TeamChip({ tla, flag, label = 'TBD' }) {
+  if (!tla) return <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>{label}</span>;
+  return (
+    <span className='flex items-center gap-1'>
+      {flag && <img src={`https://flagcdn.com/w20/${flag}.png`} className='w-4 h-3 object-cover rounded-xs shrink-0' alt='' />}
+      <span className='text-xs font-bold' style={{ color: 'var(--color-text-primary)' }}>{tla}</span>
+    </span>
+  );
+}
+
+function BracketTeamsCard({ matches, onSave }) {
+  const [applying, setApplying] = useState({});
+  const [clearing, setClearing] = useState({});
+
+  // Compute actual standings from real match scores
+  const { groupStandings, best3rd } = useMemo(() => {
+    const GROUPS = 'ABCDEFGHIJKL'.split('');
+    const byGroup = {};
+    for (const g of GROUPS) byGroup[g] = [];
+    for (const m of matches) {
+      if (m.stage === 'group' && m.group) byGroup[m.group].push(m);
+    }
+    const gs = {};
+    for (const g of GROUPS) {
+      const gm = byGroup[g];
+      if (!gm.length) continue;
+      const teamMap = {};
+      for (const m of gm) {
+        teamMap[m.tlaA] = { tla: m.tlaA, name: m.teamA, flag: m.flagA, crest: m.crestA };
+        teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB, crest: m.crestB };
+      }
+      const rp = {};
+      for (const m of gm) {
+        if (m.scoreA != null && m.scoreB != null)
+          rp[m.id] = { predictedScoreA: m.scoreA, predictedScoreB: m.scoreB };
+      }
+      gs[g] = computeGroupStandings(Object.values(teamMap), gm, rp);
+    }
+    return { groupStandings: gs, best3rd: getBest3rdPlaceTeams(gs) };
+  }, [matches]);
+
+  // R32 Firestore docs sorted by date
+  const r32Docs = useMemo(() =>
+    matches
+      .filter(m => m.stage === 'roundOf32')
+      .sort((a, b) => (a.date?.toDate?.() || 0) - (b.date?.toDate?.() || 0)),
+    [matches]);
+
+  // Map each bracket slot ID → its Firestore doc.
+  // First match by computed home team TLA (reliable for slots where API already has a team),
+  // then fall back to date-sort position for TBD slots.
+  const slotToDoc = useMemo(() => {
+    const result = {};
+    const usedIds = new Set();
+
+    // Pass 1: anchor by known home TLA
+    for (const slotDef of BRACKET_R32) {
+      const { home } = getR32Teams(slotDef, groupStandings, best3rd);
+      if (!home?.tla) continue;
+      const found = r32Docs.find(d => !usedIds.has(d.id) && (d.tlaA === home.tla || d.tlaB === home.tla));
+      if (found) { result[slotDef.id] = found; usedIds.add(found.id); }
+    }
+
+    // Pass 2: date-order fallback for remaining TBD slots
+    const unmatched = r32Docs.filter(d => !usedIds.has(d.id));
+    let ui = 0;
+    for (const slotDef of BRACKET_R32) {
+      if (!result[slotDef.id]) result[slotDef.id] = unmatched[ui++];
+    }
+    return result;
+  }, [r32Docs, groupStandings, best3rd]);
+
+  async function handleApply(slotDef) {
+    const { home, away } = getR32Teams(slotDef, groupStandings, best3rd);
+    if (!home || !away) return;
+    const matchDoc = slotToDoc[slotDef.id];
+    if (!matchDoc) return;
+    setApplying(p => ({ ...p, [slotDef.id]: true }));
+    try {
+      await updateDoc(doc(db, 'matches', matchDoc.id), {
+        // Snapshot the current API values so the admin card can still show them
+        apiSnapshotTlaA: matchDoc.tlaA || null,
+        apiSnapshotFlagA: matchDoc.flagA || null,
+        apiSnapshotTlaB: matchDoc.tlaB || null,
+        apiSnapshotFlagB: matchDoc.flagB || null,
+        // Override the live fields used by the bracket/llaves tab
+        teamA: home.name || '', tlaA: home.tla || '',
+        flagA: home.flag || null, crestA: home.crest || null,
+        teamB: away.name || '', tlaB: away.tla || '',
+        flagB: away.flag || null, crestB: away.crest || null,
+        adminTeamOverride: true,
+      });
+      onSave?.('Equipos aplicados');
+    } catch (e) {
+      onSave?.('Error: ' + e.message, 'error');
+    } finally {
+      setApplying(p => ({ ...p, [slotDef.id]: false }));
+    }
+  }
+
+  async function handleClear(slotDef) {
+    const matchDoc = slotToDoc[slotDef.id];
+    if (!matchDoc) return;
+    setClearing(p => ({ ...p, [slotDef.id]: true }));
+    try {
+      await updateDoc(doc(db, 'matches', matchDoc.id), {
+        teamA: deleteField(), tlaA: deleteField(),
+        flagA: deleteField(), crestA: deleteField(),
+        teamB: deleteField(), tlaB: deleteField(),
+        flagB: deleteField(), crestB: deleteField(),
+        adminTeamOverride: deleteField(),
+        apiSnapshotTlaA: deleteField(), apiSnapshotFlagA: deleteField(),
+        apiSnapshotTlaB: deleteField(), apiSnapshotFlagB: deleteField(),
+      });
+      onSave?.('Override borrado — la API llenará los datos en el próximo sync');
+    } catch (e) {
+      onSave?.('Error: ' + e.message, 'error');
+    } finally {
+      setClearing(p => ({ ...p, [slotDef.id]: false }));
+    }
+  }
+
+  if (r32Docs.length === 0) return (
+    <Accordion title='Equipos en Llaves (R32)'>
+      <p className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
+        Sin datos. Sincroniza primero para cargar los partidos de R32.
+      </p>
+    </Accordion>
+  );
+
+  return (
+    <Accordion title='Equipos en Llaves (R32)'>
+      <p className='text-xs mb-3' style={{ color: 'var(--color-text-muted)' }}>
+        <strong>Grupos</strong> = calculado desde resultados reales · <strong>API</strong> = almacenado actualmente.
+        Usa <em>Aplicar</em> para llenar TBD; <em>Quitar</em> para devolver el control a la API.
+      </p>
+      <div className='space-y-2'>
+        {BRACKET_R32.map(slotDef => {
+          const { home, away } = getR32Teams(slotDef, groupStandings, best3rd);
+          const matchDoc = slotToDoc[slotDef.id];
+          const hasOverride = !!matchDoc?.adminTeamOverride;
+          const computedComplete = !!home && !!away;
+          const apiComplete = !!(matchDoc?.tlaA && matchDoc?.tlaB);
+          const alreadyMatch = computedComplete && apiComplete
+            && matchDoc.tlaA === home.tla && matchDoc.tlaB === away.tla;
+
+          return (
+            <div
+              key={slotDef.id}
+              className='rounded-lg px-3 pt-2 pb-2.5'
+              style={{
+                background: 'var(--color-surface)',
+                border: `1px solid ${hasOverride ? 'rgba(212,168,67,0.4)' : 'var(--color-border)'}`,
+              }}
+            >
+              {/* Row 1: match number + slot description + badge */}
+              <div className='flex items-center gap-2 mb-1.5'>
+                <span
+                  className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
+                  style={{ background: 'var(--color-surface-card)', color: 'var(--color-text-muted)' }}
+                >
+                  M{slotDef.match}
+                </span>
+                <span className='text-[10px] truncate' style={{ color: 'var(--color-text-muted)' }}>
+                  {SLOT_LABEL[slotDef.home]} vs {SLOT_LABEL[slotDef.away]}
+                </span>
+                {hasOverride && (
+                  <span className='text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ml-auto'
+                    style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}>
+                    manual
+                  </span>
+                )}
+                {alreadyMatch && !hasOverride && (
+                  <span className='text-xs font-semibold shrink-0 ml-auto' style={{ color: '#4caf72' }}>✓</span>
+                )}
+              </div>
+
+              {/* Row 2: computed vs api + action */}
+              <div className='flex items-center gap-2'>
+                <div className='flex items-center gap-1.5 flex-1 min-w-0'>
+                  <span className='text-[9px] font-semibold shrink-0' style={{ color: 'var(--color-text-muted)' }}>GR</span>
+                  <TeamChip tla={home?.tla} flag={home?.flag} label='—' />
+                  <span className='text-[10px] shrink-0' style={{ color: 'var(--color-text-muted)' }}>vs</span>
+                  <TeamChip tla={away?.tla} flag={away?.flag} label='—' />
+                </div>
+
+                <span className='text-[10px] shrink-0' style={{ color: 'var(--color-text-muted)' }}>→</span>
+
+                <div className='flex items-center gap-1.5 flex-1 min-w-0'>
+                  <span className='text-[9px] font-semibold shrink-0' style={{ color: 'var(--color-text-muted)' }}>API</span>
+                  <TeamChip tla={hasOverride ? matchDoc?.apiSnapshotTlaA : matchDoc?.tlaA} flag={hasOverride ? matchDoc?.apiSnapshotFlagA : matchDoc?.flagA} label='TBD' />
+                  <span className='text-[10px] shrink-0' style={{ color: 'var(--color-text-muted)' }}>vs</span>
+                  <TeamChip tla={hasOverride ? matchDoc?.apiSnapshotTlaB : matchDoc?.tlaB} flag={hasOverride ? matchDoc?.apiSnapshotFlagB : matchDoc?.flagB} label='TBD' />
+                </div>
+
+                <div className='shrink-0'>
+                  {hasOverride && (
+                    <button
+                      onClick={() => handleClear(slotDef)}
+                      disabled={clearing[slotDef.id]}
+                      className='text-xs px-2 py-1 rounded-lg'
+                      style={{
+                        background: 'rgba(231,76,60,0.1)',
+                        color: 'var(--color-accent-red)',
+                        border: '1px solid var(--color-accent-red)',
+                        opacity: clearing[slotDef.id] ? 0.6 : 1,
+                      }}
+                    >
+                      {clearing[slotDef.id] ? '...' : 'Quitar'}
+                    </button>
+                  )}
+                  {!hasOverride && !alreadyMatch && computedComplete && !apiComplete && (
+                    <button
+                      onClick={() => handleApply(slotDef)}
+                      disabled={applying[slotDef.id]}
+                      className='text-xs px-2.5 py-1 rounded-lg font-semibold'
+                      style={{ background: 'var(--color-pitch)', color: '#fff', opacity: applying[slotDef.id] ? 0.6 : 1 }}
+                    >
+                      {applying[slotDef.id] ? '...' : 'Aplicar'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Accordion>
+  );
+}
+
 export default function AdminPage() {
   const { profile } = useAuth();
   const [matches, setMatches] = useState([]);
@@ -802,6 +1035,9 @@ export default function AdminPage() {
 
       {/* Individual awards */}
       <AwardsCard onSave={(msg, type) => showToast(msg, type)} />
+
+      {/* Bracket team overrides */}
+      <BracketTeamsCard matches={matches} onSave={(msg, type) => showToast(msg, type || 'success')} />
 
       {/* Manual overrides */}
       <h2 className='text-sm font-bold uppercase tracking-wider mb-3' style={{ color: 'var(--color-text-muted)' }}>

@@ -208,6 +208,19 @@ export async function syncMatchesFromAPI() {
         delete toWrite.winner;
       }
 
+      // If admin has manually set teams for this slot, don't clobber with API data
+      // Admin must explicitly click "Quitar override" to let API data flow in again
+      if (prev?.adminTeamOverride) {
+        delete toWrite.teamA;
+        delete toWrite.teamB;
+        delete toWrite.tlaA;
+        delete toWrite.tlaB;
+        delete toWrite.flagA;
+        delete toWrite.flagB;
+        delete toWrite.crestA;
+        delete toWrite.crestB;
+      }
+
       // Don't overwrite confirmed team assignments with empty values — the API
       // sometimes returns blank homeTeam/awayTeam for knockout slots it hasn't
       // populated yet, which would erase teams that were correctly placed on a
