@@ -187,9 +187,48 @@ export default function RulesPage() {
           </p>
         </div>
         <TierTable config={knockout.liveMatchResult} />
-        <p className='text-xs mt-2' style={{ color: 'var(--color-text-muted)' }}>
+        <p className='text-xs mt-2 mb-3' style={{ color: 'var(--color-text-muted)' }}>
           Puntaje fijo en todas las rondas. Se acumula con las predicciones pre-torneo.
         </p>
+
+        {/* Tie / penalties rule — advancer demotion */}
+        <div
+          className='rounded-lg p-3 text-xs'
+          style={{
+            background: 'rgba(212,168,67,0.08)',
+            border: '1px solid rgba(212,168,67,0.2)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          <p className='font-semibold mb-1' style={{ color: 'var(--color-gold)' }}>
+            Empates y penales
+          </p>
+          <p>
+            En eliminatorias siempre avanza alguien. Si predecís un empate, tenés que elegir quién pasa por penales.
+            Cuando el partido real se define por penales y vos también predijiste empate, <strong>acertar quién avanza
+            te mantiene en tu nivel; fallarlo te baja un nivel</strong>:
+          </p>
+          <ul className='mt-2 space-y-1 list-disc list-inside'>
+            <li>
+              Marcador de empate exacto + quién avanza ✓ → <strong>{knockout.liveMatchResult.exactScore} pts</strong> (exacto)
+            </li>
+            <li>
+              Marcador de empate exacto pero quién avanza ✗ →{' '}
+              <strong>{knockout.liveMatchResult.correctOutcomeAndGoalDifference} pts</strong> (baja a diferencia de gol)
+            </li>
+            <li>
+              Empate no exacto + quién avanza ✓ →{' '}
+              <strong>{knockout.liveMatchResult.correctOutcomeAndGoalDifference} pts</strong> (diferencia de gol)
+            </li>
+            <li>
+              Empate no exacto + quién avanza ✗ → <strong>{knockout.liveMatchResult.correctOutcome} pt</strong> (resultado correcto)
+            </li>
+          </ul>
+          <p className='mt-2' style={{ color: 'var(--color-text-muted)' }}>
+            Aplica solo a las predicciones en vivo. En el bracket pre-torneo, acertar quién avanza ya se premia aparte
+            (Clasificación de Equipos).
+          </p>
+        </div>
       </Section>
 
       {/* Tournament outcomes */}

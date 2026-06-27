@@ -112,18 +112,20 @@ export function TournamentDataProvider({ children }) {
   }, [matches]);
   const tournamentStarted = firstGroupMatchDate ? new Date() >= firstGroupMatchDate : false;
 
-  // Derived from the current user's resolved Pronóstico bracket vs the real fixtures:
-  //   bracketMatchupIds    — real matchIds where BOTH real teams appear in the user's
-  //                          bracket at that stage (a "matchup hit"). Keyed for the
-  //                          real-match surfaces (Partidos / Llaves).
-  //   bracketMatchupSlotIds — bracket slot ids (r32_01… / 'final' / '3rd') whose
-  //                          resolved pairing equals a real match. Keyed for the
-  //                          Pronóstico bracket surface (FixturePage), whose cards are
-  //                          slots, not real matches.
-  //   bracketPredByMatchId — the user's bracket score prediction for the slot whose
-  //                          resolved pairing equals the real match (exact pair).
-  // All mirror the scoring logic in matchSync._writePredictionPoints so the UI and
-  // the awarded points always agree.
+  // A "matchup hit" (Acierto) = the user predicted, in their Pronóstico bracket, the
+  // exact pairing that a real knockout fixture turned out to be. Derived from the
+  // current user's resolved bracket vs the real fixtures:
+  //   bracketMatchupIds     — real matchIds whose two teams equal a bracket slot's
+  //                           resolved pairing. Keyed for the real-match surfaces
+  //                           (Partidos / Llaves).
+  //   bracketMatchupSlotIds — the matching bracket slot ids (r32_01… / 'final' / '3rd').
+  //                           Keyed for the Pronóstico bracket surface (FixturePage),
+  //                           whose cards are slots, not real matches.
+  //   bracketPredByMatchId  — the user's bracket score prediction for that slot (only
+  //                           when both scores were entered).
+  // NOTE: this is stricter than the scoring "Llaves bonus" in matchSync, which applies
+  // whenever both teams merely reach the stage. The highlight intentionally flags only
+  // the exact-pairing case.
   const { bracketMatchupIds, bracketMatchupSlotIds, bracketPredByMatchId } = useMemo(() => {
     const empty = { bracketMatchupIds: new Set(), bracketMatchupSlotIds: new Set(), bracketPredByMatchId: {} };
     if (!myBracket) return empty;
@@ -147,26 +149,6 @@ export function TournamentDataProvider({ children }) {
     const best3rd = getBest3rdPlaceTeams(standings);
     const resolved = resolveFullBracket(standings, best3rd, myBracket, teamsByTla);
 
-    // Teams the user predicted to reach each stage: R32 = the round's participants,
-    // R16/QF/SF = the previous round's winners, final = the two SF winners, 3rd = the
-    // resolved 3rd-place pair.
-    const add = (set, tla) => { if (tla) set.add(tla); };
-    const stageTeams = {
-      roundOf32: new Set(), roundOf16: new Set(), quarterfinals: new Set(),
-      semifinals: new Set(), final: new Set(), thirdPlace: new Set(),
-    };
-    for (const def of BRACKET_R32) {
-      add(stageTeams.roundOf32, resolved[def.id]?.home?.tla);
-      add(stageTeams.roundOf32, resolved[def.id]?.away?.tla);
-      add(stageTeams.roundOf16, resolved[def.id]?.winner);
-    }
-    for (const def of BRACKET_R16) add(stageTeams.quarterfinals, resolved[def.id]?.winner);
-    for (const def of BRACKET_QF) add(stageTeams.semifinals, resolved[def.id]?.winner);
-    add(stageTeams.final, resolved['sf_1']?.winner);
-    add(stageTeams.final, resolved['sf_2']?.winner);
-    add(stageTeams.thirdPlace, resolved['3rd']?.home?.tla);
-    add(stageTeams.thirdPlace, resolved['3rd']?.away?.tla);
-
     // The bracket slot whose resolved pairing equals a given real match (exact pair).
     const SLOT_DEFS = { roundOf32: BRACKET_R32, roundOf16: BRACKET_R16, quarterfinals: BRACKET_QF, semifinals: BRACKET_SF };
     const isPair = (slotId, tlaA, tlaB) => {
@@ -187,14 +169,10 @@ export function TournamentDataProvider({ children }) {
     for (const m of matches) {
       if (!m.tlaA || !m.tlaB) continue;
 
-      const teams = stageTeams[m.stage];
-      if (teams?.has(m.tlaA) && teams.has(m.tlaB)) bracketMatchupIds.add(m.id);
-
-      // A slot whose resolved pairing equals this real match: the real teams sit
-      // exactly where the user placed them, so it's also a matchup hit on the
-      // bracket surface. (Always a subset of bracketMatchupIds.)
+      // Exact-pairing hit: the real teams sit exactly where the user placed them.
       const slotId = slotForMatch(m);
       if (!slotId) continue;
+      bracketMatchupIds.add(m.id);
       bracketMatchupSlotIds.add(slotId);
 
       const scoreA = myBracket[`ks_${slotId}_A`];

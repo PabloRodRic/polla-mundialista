@@ -254,7 +254,7 @@ export async function syncMatchesFromAPI() {
 
     // Update live points on every sync cycle
     for (const match of currentlyLive) {
-      await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage, match.tlaA, match.tlaB);
+      await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage, match.tlaA, match.tlaB, match.winner);
     }
 
     // Sweep for groups that are fully finished but whose standings weren't scored yet
@@ -307,8 +307,15 @@ export function stopAutoSync() {
 
 // ─── Point calculation ────────────────────────────────────────────────────────
 
-// isPreTournament=true uses scaled per-round scoring from preTournamentMatchResult
-export function computeMatchPoints(predicted, real, stage, isPreTournament = false) {
+// isPreTournament=true uses scaled per-round scoring from preTournamentMatchResult.
+//
+// advancer (live knockout predictions only): { predicted, real } TLAs. When a real
+// knockout match is decided by penalties (the real score is a draw) and the user also
+// predicted a draw, getting the advancer wrong demotes the prediction one tier
+// (exact → goal-diff → outcome). On non-draws "who advances" is already encoded by the
+// outcome, so the demotion never applies there. Omit `advancer` (group stage, the
+// Pronóstico bracket — where advancement is scored separately) to skip it entirely.
+export function computeMatchPoints(predicted, real, stage, isPreTournament = false, advancer = null) {
   const pA = Number(predicted.scoreA);
   const pB = Number(predicted.scoreB);
   const rA = Number(real.scoreA);
@@ -325,28 +332,41 @@ export function computeMatchPoints(predicted, real, stage, isPreTournament = fal
     cfg = scoring.knockout.liveMatchResult;
   }
 
-  // Tier 3: exact score
-  if (pA === rA && pB === rB) return cfg.exactScore;
-
   const pResult = Math.sign(pA - pB);
   const rResult = Math.sign(rA - rB);
   const pDiff = Math.abs(pA - pB);
   const rDiff = Math.abs(rA - rB);
 
-  // Tier 2: correct outcome + goal difference
-  if (pResult === rResult && pDiff === rDiff) return cfg.correctOutcomeAndGoalDifference;
+  // Tier: 3 exact · 2 outcome + goal diff · 1 outcome · 0 miss
+  let tier;
+  if (pA === rA && pB === rB) tier = 3;
+  else if (pResult === rResult && pDiff === rDiff) tier = 2;
+  else if (pResult === rResult) tier = 1;
+  else tier = 0;
 
-  // Tier 1: correct outcome
-  if (pResult === rResult) return cfg.correctOutcome;
+  // Penalty-decided match the user also called as a draw: wrong advancer drops a tier.
+  // Skipped when the real advancer is unknown so a missing winner can't penalize anyone.
+  if (advancer && advancer.real && tier > 0 && rResult === 0 && pResult === 0) {
+    if (advancer.predicted !== advancer.real) tier -= 1;
+  }
 
+  if (tier === 3) return cfg.exactScore;
+  if (tier === 2) return cfg.correctOutcomeAndGoalDifference;
+  if (tier === 1) return cfg.correctOutcome;
   return 0;
 }
 
 // Shared: write points to all prediction collections for a match, return affected user IDs
 // tlaA/tlaB: real match teams — used to detect bracket matchup hits for pre-tournament scoring
-async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB) {
+// winner: 'home'/'away'/null — the penalty/tiebreaker winner for a draw, used to resolve
+//         who really advanced when scoring live knockout predictions (advancer demotion).
+async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB, winner = null) {
   const affectedUserIds = new Set();
   const batch = writeBatch(db);
+
+  // Team that really advanced (null on non-knockout or when undecided). On a draw this
+  // comes from the stored `winner`; otherwise it's the higher-scoring side.
+  const realAdvancer = stage !== 'group' ? getMatchWinnerTla({ scoreA, scoreB, winner, tlaA, tlaB }) : null;
 
   // For knockout matches: resolve every user's bracket to detect matchup hits and find which
   // bracket slot (if any) corresponds to this real match so we can score the Pronóstico prediction.
@@ -412,11 +432,16 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
   predsSnap.forEach((predDoc) => {
     const pred = predDoc.data();
     const matchupHit = matchupHitByUser.has(pred.userId);
+    // Who the user predicted to advance: higher score, or their penalty pick on a draw.
+    const pA = Number(pred.predictedScoreA);
+    const pB = Number(pred.predictedScoreB);
+    const predictedAdvancer = pA > pB ? tlaA : pB > pA ? tlaB : (pred.predictedPenaltyWinner ?? null);
     const points = computeMatchPoints(
       { scoreA: pred.predictedScoreA, scoreB: pred.predictedScoreB },
       { scoreA, scoreB },
       stage,
       matchupHit,
+      { predicted: predictedAdvancer, real: realAdvancer },
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
     const tier = resultTier(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
@@ -783,7 +808,7 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   });
   await resetBatch.commit();
 
-  const recalcUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, matchData?.tlaA, matchData?.tlaB);
+  const recalcUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, matchData?.tlaA, matchData?.tlaB, matchData?.winner);
   for (const uid of recalcUserIds) affectedUserIds.add(uid);
 
   await updateDoc(matchRef, { pointsCalculated: true });
@@ -816,8 +841,8 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
 }
 
 // Live scoring — recalculates every sync, no guard, no rank snapshot, no flag
-export async function calculateLivePoints(matchId, scoreA, scoreB, stage, tlaA, tlaB) {
-  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB);
+export async function calculateLivePoints(matchId, scoreA, scoreB, stage, tlaA, tlaB, winner = null) {
+  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB, winner);
   await recalcUsers(affectedUserIds);
 }
 

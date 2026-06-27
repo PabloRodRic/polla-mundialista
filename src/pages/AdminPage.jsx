@@ -190,7 +190,15 @@ function MatchOverrideCard({ match, onSave, onShowStatus }) {
       if (status === 'finished' && scoreA !== '' && scoreB !== '') {
         await calculatePointsForMatch(match.id, Number(scoreA), Number(scoreB), match.stage);
       } else if (status === 'live' && scoreA !== '' && scoreB !== '') {
-        await calculateLivePoints(match.id, Number(scoreA), Number(scoreB), match.stage);
+        await calculateLivePoints(
+          match.id,
+          Number(scoreA),
+          Number(scoreB),
+          match.stage,
+          match.tlaA,
+          match.tlaB,
+          winner !== 'auto' ? winner : null,
+        );
       }
       onSave?.();
     } catch (err) {

@@ -542,7 +542,7 @@ function KnockoutMatchCard({
               className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
               style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
             >
-              ✦ llave
+              ✦ Acierto
             </span>
           )}
         </span>

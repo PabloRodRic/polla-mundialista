@@ -21,6 +21,16 @@ const STAGE_LABEL = {
   final: 'Final',
 };
 
+// Short labels for the stage selector tabs — mirrors the Pronóstico → Eliminatorias tab.
+const STAGE_TABS = [
+  { key: 'roundOf32', label: '16avos' },
+  { key: 'roundOf16', label: 'Octavos' },
+  { key: 'quarterfinals', label: 'Cuartos' },
+  { key: 'semifinals', label: 'Semifinales' },
+  { key: 'thirdPlace', label: 'Tercer Puesto' },
+  { key: 'final', label: 'Final' },
+];
+
 // First official FIFA fixture number of each knockout stage. The API doesn't
 // carry these, so we assign them by date order within each stage (FIFA numbers
 // follow the schedule): R32 73–88, R16 89–96, QF 97–100, SF 101–102, 3rd 103, F 104.
@@ -199,7 +209,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
               className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
               style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
             >
-              ✦ llave
+              ✦ Acierto
             </span>
           )}
         </div>
@@ -359,7 +369,9 @@ export default function PredictionsPage() {
     tournamentStarted,
   } = useTournamentData();
   const [saving, setSaving] = useState({});
-  const [filter, setFilter] = useState('upcoming');
+  // Selected knockout stage. null = follow the current/next stage automatically until
+  // the user taps a tab.
+  const [stage, setStage] = useState(null);
   const debounceRef = useRef({});
 
   // "Ver pronósticos de otros" popup (post-lock, all users)
@@ -437,31 +449,55 @@ export default function PredictionsPage() {
   const availableMatches = matches.filter(
     (m) => isLiveAvailable(m) && !isLiveLocked(m) && m.status !== 'finished' && m.status !== 'cancelled',
   );
-  const finishedMatches = matches.filter((m) => m.status === 'finished');
-
-  // "Próximos" = only the current/next knockout stage (first stage with non-finished matches)
-  const nextStage = KNOCKOUT_STAGES.find((stage) =>
-    matches.some((m) => m.stage === stage && m.status !== 'finished' && m.status !== 'cancelled'),
-  );
-  const upcomingMatches = nextStage ? matches.filter((m) => m.stage === nextStage) : [];
-
-  const filtered = filter === 'all' ? matches : filter === 'upcoming' ? upcomingMatches : finishedMatches;
-
   const pendingCount = availableMatches.filter((m) => !predictions[m.id]).length;
+
+  // Default the view to the current/next stage (first stage with a non-finished match),
+  // falling back to the last stage that has matches once everything is done.
+  const nextStage =
+    KNOCKOUT_STAGES.find((s) => matches.some((m) => m.stage === s && m.status !== 'finished' && m.status !== 'cancelled')) ||
+    [...KNOCKOUT_STAGES].reverse().find((s) => matches.some((m) => m.stage === s)) ||
+    'roundOf32';
+  const selectedStage = stage ?? nextStage;
+
+  // Matches in the selected stage, split so finished/cancelled sink to the bottom and
+  // live → upcoming stay on top (each sub-group ordered by kickoff).
+  const byDate = (a, b) => (a.date?.toDate?.() || 0) - (b.date?.toDate?.() || 0);
+  const isPast = (m) => m.status === 'finished' || m.status === 'cancelled';
+  const stageMatches = matches.filter((m) => m.stage === selectedStage);
+  const activeStageMatches = stageMatches
+    .filter((m) => !isPast(m))
+    .sort((a, b) => (a.status === 'live' ? 0 : 1) - (b.status === 'live' ? 0 : 1) || byDate(a, b));
+  const pastStageMatches = stageMatches.filter(isPast).sort(byDate);
 
   // Derive each knockout match's official FIFA number from its stage + date order
   const matchNumberById = {};
-  for (const stage of KNOCKOUT_STAGES) {
-    const start = STAGE_START_NUMBER[stage];
+  for (const s of KNOCKOUT_STAGES) {
+    const start = STAGE_START_NUMBER[s];
     if (!start) continue;
     matches
-      .filter((m) => m.stage === stage)
+      .filter((m) => m.stage === s)
       .slice()
       .sort((a, b) => (a.date?.toDate?.() || 0) - (b.date?.toDate?.() || 0))
       .forEach((m, i) => {
         matchNumberById[m.id] = start + i;
       });
   }
+
+  const renderCard = (m) => (
+    <PredictionCard
+      key={m.id}
+      match={m}
+      prediction={predictions[m.id] ?? null}
+      onSave={savePrediction}
+      saving={saving[m.id] ?? false}
+      onShowBets={openBets}
+      onShowStatus={openStatus}
+      matchNumber={matchNumberById[m.id]}
+      isAdmin={isAdmin}
+      bracketMatchup={bracketMatchupIds.has(m.id)}
+      bracketPred={bracketPredByMatchId[m.id] ?? null}
+    />
+  );
 
   // The whole tab stays locked until the World Cup kicks off (first group match);
   // `tournamentStarted` comes from the shared TournamentData context.
@@ -523,57 +559,51 @@ export default function PredictionsPage() {
             Marcá tus pronósticos en cada partido hasta una hora antes del inicio del mismo.
           </p>
 
-          {/* Filter tabs — centered on desktop */}
-          <div className='flex justify-center gap-2 mb-4'>
-            {[
-              { value: 'upcoming', label: 'Próximos' },
-              { value: 'finished', label: 'Finalizados' },
-              { value: 'all', label: 'Todos' },
-            ].map((f) => (
+          {/* Stage selector — two rows of 3 on phone, single row of 6 on desktop */}
+          <div className='grid grid-cols-3 md:grid-cols-6 gap-2 mb-4'>
+            {STAGE_TABS.map((t) => (
               <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className='flex-1 md:flex-none md:px-10 py-1.5 md:py-3 rounded-full text-xs font-medium transition-colors'
+                key={t.key}
+                onClick={() => setStage(t.key)}
+                className='w-full h-9 md:h-11 px-2 rounded-lg text-xs font-bold transition-colors'
                 style={{
-                  background: filter === f.value ? 'var(--color-gold)' : 'var(--color-surface-card)',
-                  color: filter === f.value ? '#111318' : 'var(--color-text-secondary)',
-                  border: filter === f.value ? 'none' : '1px solid var(--color-border)',
+                  background: selectedStage === t.key ? 'var(--color-gold)' : 'var(--color-surface-card)',
+                  color: selectedStage === t.key ? '#111318' : 'var(--color-text-secondary)',
+                  border: selectedStage === t.key ? 'none' : '1px solid var(--color-border)',
                 }}
               >
-                {f.label}
+                {t.label}
               </button>
             ))}
           </div>
 
-          {filtered.length === 0 ? (
+          {stageMatches.length === 0 ? (
             <div className='text-center py-16' style={{ color: 'var(--color-text-muted)' }}>
-              <p className='text-4xl mb-3'>{filter === 'upcoming' ? '📅' : filter === 'finished' ? '✅' : '📝'}</p>
-              <p>
-                {filter === 'upcoming'
-                  ? 'No hay partidos próximos pendientes.'
-                  : filter === 'finished'
-                    ? 'Aún no hay partidos finalizados.'
-                    : 'No hay partidos de fase eliminatoria.'}
-              </p>
+              <p className='text-4xl mb-3'>📅</p>
+              <p>Aún no hay partidos en {STAGE_LABEL[selectedStage]}.</p>
             </div>
           ) : (
-            <div className='grid grid-cols-1 md:grid-cols-2 gap-x-4 items-start'>
-              {filtered.map((m) => (
-                <PredictionCard
-                  key={m.id}
-                  match={m}
-                  prediction={predictions[m.id] ?? null}
-                  onSave={savePrediction}
-                  saving={saving[m.id] ?? false}
-                  onShowBets={openBets}
-                  onShowStatus={openStatus}
-                  matchNumber={matchNumberById[m.id]}
-                  isAdmin={isAdmin}
-                  bracketMatchup={bracketMatchupIds.has(m.id)}
-                  bracketPred={bracketPredByMatchId[m.id] ?? null}
-                />
-              ))}
-            </div>
+            <>
+              {activeStageMatches.length > 0 && (
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-x-4 items-start'>
+                  {activeStageMatches.map(renderCard)}
+                </div>
+              )}
+
+              {pastStageMatches.length > 0 && (
+                <>
+                  <h2
+                    className='text-xs font-semibold uppercase tracking-wider mb-3 mt-4'
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    Finalizados
+                  </h2>
+                  <div className='grid grid-cols-1 md:grid-cols-2 gap-x-4 items-start'>
+                    {pastStageMatches.map(renderCard)}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </>
       )}
