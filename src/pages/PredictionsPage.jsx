@@ -141,8 +141,10 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
 
   const [scoreA, setScoreA] = useState(prediction?.predictedScoreA ?? null);
   const [scoreB, setScoreB] = useState(prediction?.predictedScoreB ?? null);
+  const [penaltyWinner, setPenaltyWinner] = useState(prediction?.predictedPenaltyWinner ?? null);
   const [prevPredA, setPrevPredA] = useState(prediction?.predictedScoreA);
   const [prevPredB, setPrevPredB] = useState(prediction?.predictedScoreB);
+  const [prevPredW, setPrevPredW] = useState(prediction?.predictedPenaltyWinner);
 
   if (prediction?.predictedScoreA !== prevPredA) {
     setPrevPredA(prediction?.predictedScoreA);
@@ -152,13 +154,27 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
     setPrevPredB(prediction?.predictedScoreB);
     setScoreB(prediction?.predictedScoreB ?? null);
   }
+  if (prediction?.predictedPenaltyWinner !== prevPredW) {
+    setPrevPredW(prediction?.predictedPenaltyWinner);
+    setPenaltyWinner(prediction?.predictedPenaltyWinner ?? null);
+  }
+
+  const isTie = scoreA !== null && scoreB !== null && scoreA === scoreB;
 
   function handleChange(side, val) {
     const newA = side === 'A' ? val : scoreA;
     const newB = side === 'B' ? val : scoreB;
     if (side === 'A') setScoreA(val);
     else setScoreB(val);
-    onSave(match.id, newA, newB);
+    const stillTie = newA !== null && newB !== null && newA === newB;
+    const winner = stillTie ? penaltyWinner : null;
+    if (!stillTie) setPenaltyWinner(null);
+    onSave(match.id, newA, newB, winner);
+  }
+
+  function handleWinnerPick(tla) {
+    setPenaltyWinner(tla);
+    onSave(match.id, scoreA, scoreB, tla);
   }
 
   return (
@@ -214,6 +230,39 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
 
         <TeamSlot match={match} side='B' />
       </div>
+
+      {/* Penalty winner picker — appears when scores are tied and match is still open */}
+      {isTie && available && !locked && (
+        <div className='mt-3 pt-3' style={{ borderTop: '1px solid var(--color-border)' }}>
+          <p className='text-xs text-center mb-2' style={{ color: 'var(--color-text-muted)' }}>
+            Empate — ¿quién gana por penales?
+          </p>
+          <div className='flex gap-2 justify-center'>
+            {[{ tla: match.tlaA, flag: match.flagA, name: match.teamA }, { tla: match.tlaB, flag: match.flagB, name: match.teamB }].map((team) => (
+              <button
+                key={team.tla}
+                onClick={() => handleWinnerPick(team.tla)}
+                className='flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors'
+                style={{
+                  background: penaltyWinner === team.tla ? 'var(--color-pitch)' : 'var(--color-surface)',
+                  color: penaltyWinner === team.tla ? '#fff' : 'var(--color-text-secondary)',
+                  border: `1px solid ${penaltyWinner === team.tla ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+                }}
+              >
+                {team.flag && <img src={`https://flagcdn.com/w20/${team.flag}.png`} className='w-4 h-3 object-cover rounded' alt='' />}
+                {tlaLabel(team.tla) || team.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Show chosen penalty winner when locked */}
+      {isTie && (locked || finished) && penaltyWinner && (
+        <p className='text-xs text-center mt-2' style={{ color: 'var(--color-text-muted)' }}>
+          Penales: <span style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{tlaLabel(penaltyWinner)}</span>
+        </p>
+      )}
 
       {/* Not yet available message */}
       {!available && !finished && (
@@ -318,7 +367,7 @@ export default function PredictionsPage() {
   // This tab only predicts knockout fixtures.
   const matches = allMatches.filter((m) => KNOCKOUT_STAGES.includes(m.stage));
 
-  async function writePrediction(matchId, scoreA, scoreB) {
+  async function writePrediction(matchId, scoreA, scoreB, penaltyWinner = null) {
     setSaving((s) => ({ ...s, [matchId]: true }));
     try {
       await setDoc(
@@ -328,6 +377,7 @@ export default function PredictionsPage() {
           matchId: String(matchId),
           predictedScoreA: scoreA,
           predictedScoreB: scoreB,
+          predictedPenaltyWinner: penaltyWinner,
           updatedAt: Timestamp.now(),
         },
         { merge: true },
@@ -339,17 +389,20 @@ export default function PredictionsPage() {
     }
   }
 
-  function savePrediction(matchId, scoreA, scoreB) {
+  function savePrediction(matchId, scoreA, scoreB, penaltyWinner = null) {
     if (debounceRef.current[matchId]) clearTimeout(debounceRef.current[matchId]);
-    // Require both scores — if incomplete, clear any existing partial save in Firestore
     if (scoreA === null || scoreB === null) {
-      debounceRef.current[matchId] = setTimeout(() => {
-        writePrediction(matchId, null, null);
-      }, 800);
+      // Only clear Firestore when the user explicitly empties both fields
+      if (scoreA === null && scoreB === null) {
+        debounceRef.current[matchId] = setTimeout(() => {
+          writePrediction(matchId, null, null, null);
+        }, 800);
+      }
+      // One field still being filled — don't touch Firestore yet
       return;
     }
     debounceRef.current[matchId] = setTimeout(() => {
-      writePrediction(matchId, scoreA, scoreB);
+      writePrediction(matchId, scoreA, scoreB, penaltyWinner);
     }, 800);
   }
 
