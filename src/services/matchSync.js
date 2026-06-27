@@ -254,7 +254,7 @@ export async function syncMatchesFromAPI() {
 
     // Update live points on every sync cycle
     for (const match of currentlyLive) {
-      await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage);
+      await calculateLivePoints(match.docId, match.scoreA, match.scoreB, match.stage, match.tlaA, match.tlaB);
     }
 
     // Sweep for groups that are fully finished but whose standings weren't scored yet
@@ -343,22 +343,54 @@ export function computeMatchPoints(predicted, real, stage, isPreTournament = fal
 }
 
 // Shared: write points to all prediction collections for a match, return affected user IDs
-async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
+// tlaA/tlaB: real match teams — used to detect bracket matchup hits for pre-tournament scoring
+async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB) {
   const affectedUserIds = new Set();
   const batch = writeBatch(db);
 
+  // Resolve every user's pre-tournament bracket to detect matchup hits for this real match.
+  // Only relevant for knockout stages where tlaA/tlaB are known.
+  const matchupHitByUser = new Set();
+  if (tlaA && tlaB && stage !== 'group') {
+    const pair = [tlaA, tlaB].sort().join('-');
+    const stageSlots = { roundOf32: BRACKET_R32, roundOf16: BRACKET_R16, quarterfinals: BRACKET_QF, semifinals: BRACKET_SF }[stage];
+    const resolvedUsers = await resolveAllUsersBrackets();
+    for (const { userId, resolved } of resolvedUsers) {
+      let hit = false;
+      if (stageSlots) {
+        for (const def of stageSlots) {
+          const h = resolved[def.id]?.home?.tla;
+          const a = resolved[def.id]?.away?.tla;
+          if (h && a && [h, a].sort().join('-') === pair) { hit = true; break; }
+        }
+      } else if (stage === 'final') {
+        const h = resolved['final']?.home?.tla;
+        const a = resolved['final']?.away?.tla;
+        if (h && a && [h, a].sort().join('-') === pair) hit = true;
+      } else if (stage === 'thirdPlace') {
+        const h = resolved['3rd']?.home?.tla;
+        const a = resolved['3rd']?.away?.tla;
+        if (h && a && [h, a].sort().join('-') === pair) hit = true;
+      }
+      if (hit) matchupHitByUser.add(userId);
+    }
+  }
+
   // 1. Live knockout predictions (PredictionsPage → 'predictions' collection)
+  //    Apply pre-tournament scoring rates when the user predicted this exact matchup in their bracket
   const predsSnap = await getDocs(query(collection(db, 'predictions'), where('matchId', '==', String(matchId))));
   predsSnap.forEach((predDoc) => {
     const pred = predDoc.data();
+    const matchupHit = matchupHitByUser.has(pred.userId);
     const points = computeMatchPoints(
       { scoreA: pred.predictedScoreA, scoreB: pred.predictedScoreB },
       { scoreA, scoreB },
       stage,
+      matchupHit, // isPreTournament=true → use scaled per-round rates
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
     const tier = resultTier(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
-    batch.update(predDoc.ref, { pointsEarned: points, isExact, resultTier: tier, calculatedAt: Timestamp.now() });
+    batch.update(predDoc.ref, { pointsEarned: points, bracketMatchupHit: matchupHit, isExact, resultTier: tier, calculatedAt: Timestamp.now() });
     affectedUserIds.add(pred.userId);
   });
 
@@ -391,7 +423,7 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage) {
         { scoreA: predA, scoreB: predB },
         { scoreA, scoreB },
         stage,
-        true, // isPreTournament: use scaled scoring per round
+        true,
       );
       const isExact = isExactScore(predA, predB, scoreA, scoreB);
       const tier = resultTier(predA, predB, scoreA, scoreB);
@@ -723,7 +755,7 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
   });
   await resetBatch.commit();
 
-  const recalcUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage);
+  const recalcUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, matchData?.tlaA, matchData?.tlaB);
   for (const uid of recalcUserIds) affectedUserIds.add(uid);
 
   await updateDoc(matchRef, { pointsCalculated: true });
@@ -756,8 +788,8 @@ export async function calculatePointsForMatch(matchId, scoreA, scoreB, stage) {
 }
 
 // Live scoring — recalculates every sync, no guard, no rank snapshot, no flag
-export async function calculateLivePoints(matchId, scoreA, scoreB, stage) {
-  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage);
+export async function calculateLivePoints(matchId, scoreA, scoreB, stage, tlaA, tlaB) {
+  const affectedUserIds = await _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB);
   await recalcUsers(affectedUserIds);
 }
 

@@ -447,6 +447,17 @@ export async function saveBracketPick(userId, matchId, winnerTla) {
 }
 
 /**
+ * Save the user's resolved bracket matchups per stage.
+ * Called from FixturePage whenever bracketData or groupPredictions change.
+ * matchups: { roundOf32: ['ECU-MEX', ...], roundOf16: [...], ... }
+ * Used by matchSync to apply pre-tournament scoring when the matchup actually happens.
+ */
+export async function saveResolvedMatchups(userId, matchups) {
+  const ref = doc(db, BRACKET_COLLECTION, userId)
+  await setDoc(ref, { userId, predictedMatchups: matchups, updatedAt: Timestamp.now() }, { merge: true })
+}
+
+/**
  * Save a knockout match score prediction (one side at a time).
  * Stored flat to avoid Firestore merge issues with nested objects.
  * Field pattern: ks_{matchId}_{A|B}

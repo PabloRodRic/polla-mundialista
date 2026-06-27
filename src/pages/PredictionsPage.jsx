@@ -1,10 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
+import { resolveFullBracket, buildTeamLookup, BRACKET_R32, BRACKET_R16, BRACKET_QF, BRACKET_SF } from '../utils/bracketUtils';
+import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
 import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
@@ -134,7 +136,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -182,17 +184,27 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
       className='rounded-xl p-4 mb-3'
       style={{
         background: 'var(--color-surface-card)',
-        border: `1px solid ${locked ? 'var(--color-border)' : available ? 'var(--color-pitch)' : 'var(--color-border)'}`,
+        border: `1px solid ${bracketMatchup ? 'rgba(212,168,67,0.5)' : locked ? 'var(--color-border)' : available ? 'var(--color-pitch)' : 'var(--color-border)'}`,
         opacity: match.status === 'cancelled' ? 0.5 : 1,
       }}
     >
       {/* Stage + date + lock */}
       <div className='flex items-center justify-between mb-3'>
-        <span className='text-xs truncate min-w-0' style={{ color: 'var(--color-text-muted)' }}>
-          {matchNumber ? `Partido ${matchNumber} · ` : ''}
-          {STAGE_LABEL[match.stage] ? `${STAGE_LABEL[match.stage]} · ` : ''}
-          {formatDate(match.date)}
-        </span>
+        <div className='flex items-center gap-2 min-w-0'>
+          <span className='text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
+            {matchNumber ? `Partido ${matchNumber} · ` : ''}
+            {STAGE_LABEL[match.stage] ? `${STAGE_LABEL[match.stage]} · ` : ''}
+            {formatDate(match.date)}
+          </span>
+          {bracketMatchup && (
+            <span
+              className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
+              style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
+            >
+              ✦ llave
+            </span>
+          )}
+        </div>
         <div className='flex items-center gap-1.5 shrink-0 ml-2'>
           {locked && (
             <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
@@ -327,6 +339,8 @@ export default function PredictionsPage() {
     matches: allMatches,
     matchesLoading: loading,
     livePreds: predictions,
+    myBracket,
+    groupPreds,
     firstGroupMatchDate: tournamentStart,
     tournamentStarted,
   } = useTournamentData();
@@ -366,6 +380,50 @@ export default function PredictionsPage() {
 
   // This tab only predicts knockout fixtures.
   const matches = allMatches.filter((m) => KNOCKOUT_STAGES.includes(m.stage));
+
+  // Resolve the user's pre-tournament bracket to get predicted team pairs per stage.
+  // Recomputes only when bracket data or group predictions change.
+  const bracketMatchupsByStage = useMemo(() => {
+    if (!myBracket) return {};
+    const groupMatchesList = allMatches.filter((m) => m.stage === 'group');
+    if (!groupMatchesList.length) return {};
+
+    const teamsByTla = buildTeamLookup(groupMatchesList);
+    const matchesByGroup = {};
+    for (const m of groupMatchesList) {
+      if (m.group) (matchesByGroup[m.group] ||= []).push(m);
+    }
+    const standings = {};
+    for (const [g, gms] of Object.entries(matchesByGroup)) {
+      const teamMap = {};
+      for (const m of gms) {
+        teamMap[m.tlaA] = { tla: m.tlaA, name: m.teamA, flag: m.flagA };
+        teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB };
+      }
+      standings[g] = computeGroupStandings(Object.values(teamMap), gms, groupPreds);
+    }
+    const best3rd = getBest3rdPlaceTeams(standings);
+    const resolved = resolveFullBracket(standings, best3rd, myBracket, teamsByTla);
+
+    const result = {};
+    const add = (stage, h, a) => {
+      if (!h || !a) return;
+      (result[stage] ||= new Set()).add([h, a].sort().join('-'));
+    };
+    for (const def of BRACKET_R32) add('roundOf32', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
+    for (const def of BRACKET_R16) add('roundOf16', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
+    for (const def of BRACKET_QF) add('quarterfinals', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
+    for (const def of BRACKET_SF) add('semifinals', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
+    add('final', resolved['final']?.home?.tla, resolved['final']?.away?.tla);
+    add('thirdPlace', resolved['3rd']?.home?.tla, resolved['3rd']?.away?.tla);
+    return result;
+  }, [myBracket, allMatches, groupPreds]);
+
+  function getBracketMatchup(match) {
+    if (!match.tlaA || !match.tlaB) return null;
+    const pair = [match.tlaA, match.tlaB].sort().join('-');
+    return bracketMatchupsByStage[match.stage]?.has(pair) ? pair : null;
+  }
 
   async function writePrediction(matchId, scoreA, scoreB, penaltyWinner = null) {
     setSaving((s) => ({ ...s, [matchId]: true }));
@@ -541,6 +599,7 @@ export default function PredictionsPage() {
                   onShowStatus={openStatus}
                   matchNumber={matchNumberById[m.id]}
                   isAdmin={isAdmin}
+                  bracketMatchup={getBracketMatchup(m)}
                 />
               ))}
             </div>
