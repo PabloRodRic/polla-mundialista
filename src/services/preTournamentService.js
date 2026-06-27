@@ -149,7 +149,7 @@ export async function resolveAllUsersBrackets(usersMap = {}) {
     const data = d.data()
     const userId = data.userId || d.id
     const userPreds = groupPredsByUser[userId]
-    if (!userPreds) return // no group predictions → can't trust resolved teams
+    if (!userPreds) return // no group predictions → can't resolve bracket teams
 
     const standings = {}
     for (const [g, teams] of Object.entries(groupTeams)) {

@@ -76,7 +76,7 @@ function TeamFlag({ match, side }) {
   return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />;
 }
 
-function MatchCard({ match, onShowBets, betsLocked, prediction }) {
+function MatchCard({ match, onShowBets, betsLocked, prediction, bracketMatchup, bracketPred }) {
   const pA = prediction?.predictedScoreA;
   const pB = prediction?.predictedScoreB;
   const hasPrediction = pA != null && pB != null;
@@ -86,15 +86,25 @@ function MatchCard({ match, onShowBets, betsLocked, prediction }) {
       className='rounded-xl p-4 mb-3'
       style={{
         background: 'var(--color-surface-card)',
-        border: '1px solid var(--color-border)',
+        border: `1px solid ${bracketMatchup ? 'rgba(212,168,67,0.5)' : 'var(--color-border)'}`,
       }}
     >
       {/* Header */}
       <div className='flex items-center justify-between mb-3'>
-        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-          {match.stage === 'group' ? `Grupo ${match.group} · ` : ''}
-          {formatDate(match.date)}
-        </span>
+        <div className='flex items-center gap-2 min-w-0'>
+          <span className='text-xs truncate' style={{ color: 'var(--color-text-muted)' }}>
+            {match.stage === 'group' ? `Grupo ${match.group} · ` : ''}
+            {formatDate(match.date)}
+          </span>
+          {bracketMatchup && (
+            <span
+              className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
+              style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
+            >
+              ✦ llave
+            </span>
+          )}
+        </div>
         <div className='flex items-center gap-2'>
           <StatusBadge status={match.status} />
           <BetsIconButton disabled={!betsLocked} onClick={() => onShowBets(match)} />
@@ -152,17 +162,32 @@ function MatchCard({ match, onShowBets, betsLocked, prediction }) {
         </p>
       )}
 
-      {/* Your prediction + points being awarded */}
-      {hasPrediction && (
+      {/* Predictions footer */}
+      {(hasPrediction || bracketPred) && (
         <div
-          className='mt-3 pt-2 flex items-center justify-center gap-2 text-xs'
+          className='mt-3 pt-2 text-xs'
           style={{ borderTop: '1px solid var(--color-border)' }}
         >
-          <span style={{ color: 'var(--color-text-muted)' }}>Tu pronóstico:</span>
-          <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-            {pA} – {pB}
-          </span>
-          {scored && <PointsBadge points={prediction.pointsEarned} />}
+          <div className='flex items-center justify-center gap-4 flex-wrap'>
+            {hasPrediction && (
+              <div className='flex items-center gap-1.5'>
+                <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
+                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  {pA} – {pB}
+                </span>
+                {scored && <PointsBadge points={prediction.pointsEarned} />}
+              </div>
+            )}
+            {bracketPred && (
+              <div className='flex items-center gap-1.5'>
+                <span style={{ color: 'var(--color-gold)', opacity: 0.8 }}>Pronóstico:</span>
+                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  {bracketPred.scoreA} – {bracketPred.scoreB}
+                </span>
+                {scored && <PointsBadge points={bracketPred.points} />}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -198,7 +223,7 @@ export default function MatchesPage() {
   const { user } = useAuth();
   // Matches, the user's merged predictions and the tournament-lock state all come
   // from the shared TournamentData subscription (no per-page re-fetch / re-derive).
-  const { matches, matchesLoading: loading, userPreds, tournamentStarted: betsLocked } = useTournamentData();
+  const { matches, matchesLoading: loading, userPreds, bracketMatchupIds, bracketPredByMatchId, tournamentStarted: betsLocked } = useTournamentData();
   const [filter, setFilter] = useState(DEFAULT_TIME_FILTER);
 
   // "Ver pronósticos de otros" popup
@@ -281,6 +306,8 @@ export default function MatchesPage() {
                 onShowBets={openBets}
                 betsLocked={betsLocked}
                 prediction={userPreds[m.id]}
+                bracketMatchup={bracketMatchupIds.has(m.id)}
+                bracketPred={bracketPredByMatchId[m.id] ?? null}
               />
             ))}
           </div>

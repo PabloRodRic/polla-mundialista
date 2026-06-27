@@ -348,36 +348,66 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
   const affectedUserIds = new Set();
   const batch = writeBatch(db);
 
-  // Resolve every user's pre-tournament bracket to detect matchup hits for this real match.
-  // Only relevant for knockout stages where tlaA/tlaB are known.
+  // For knockout matches: resolve every user's bracket to detect matchup hits and find which
+  // bracket slot (if any) corresponds to this real match so we can score the Pronóstico prediction.
+  //
+  // Matchup hit (Llaves bonus): BOTH real teams predicted to reach this stage → pre-tournament rates.
+  //   R32 = qualify from groups; R16 = win R32; QF = win R16; SF = win QF; Final/3rd = exact pair.
+  //
+  // Bracket slot (Pronóstico scoring): the exact slot in the user's bracket where the real teams
+  //   appear as home/away. Used to look up ks_{slotId}_A/B and score the pre-tournament prediction.
   const matchupHitByUser = new Set();
+  const bracketSlotByUser = {}; // userId → slotId (e.g. 'r32_04') for Pronóstico scoring
+
   if (tlaA && tlaB && stage !== 'group') {
-    const pair = [tlaA, tlaB].sort().join('-');
-    const stageSlots = { roundOf32: BRACKET_R32, roundOf16: BRACKET_R16, quarterfinals: BRACKET_QF, semifinals: BRACKET_SF }[stage];
     const resolvedUsers = await resolveAllUsersBrackets();
+    const stageDefs = { roundOf32: BRACKET_R32, roundOf16: BRACKET_R16, quarterfinals: BRACKET_QF, semifinals: BRACKET_SF }[stage];
+
     for (const { userId, resolved } of resolvedUsers) {
+      // ── Matchup hit (team-set check) ───────────────────────────────────────
       let hit = false;
-      if (stageSlots) {
-        for (const def of stageSlots) {
-          const h = resolved[def.id]?.home?.tla;
-          const a = resolved[def.id]?.away?.tla;
-          if (h && a && [h, a].sort().join('-') === pair) { hit = true; break; }
+      if (stageDefs) {
+        const teams = new Set();
+        const prevDefs = { roundOf16: BRACKET_R32, quarterfinals: BRACKET_R16, semifinals: BRACKET_QF }[stage];
+        if (stage === 'roundOf32') {
+          for (const def of BRACKET_R32) {
+            if (resolved[def.id]?.home?.tla) teams.add(resolved[def.id].home.tla);
+            if (resolved[def.id]?.away?.tla) teams.add(resolved[def.id].away.tla);
+          }
+        } else if (prevDefs) {
+          for (const def of prevDefs) if (resolved[def.id]?.winner) teams.add(resolved[def.id].winner);
         }
+        hit = teams.has(tlaA) && teams.has(tlaB);
       } else if (stage === 'final') {
-        const h = resolved['final']?.home?.tla;
-        const a = resolved['final']?.away?.tla;
-        if (h && a && [h, a].sort().join('-') === pair) hit = true;
+        hit = (resolved['sf_1']?.winner === tlaA || resolved['sf_1']?.winner === tlaB) &&
+              (resolved['sf_2']?.winner === tlaA || resolved['sf_2']?.winner === tlaB);
       } else if (stage === 'thirdPlace') {
-        const h = resolved['3rd']?.home?.tla;
-        const a = resolved['3rd']?.away?.tla;
-        if (h && a && [h, a].sort().join('-') === pair) hit = true;
+        const h = resolved['3rd']?.home?.tla, a = resolved['3rd']?.away?.tla;
+        hit = h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA));
       }
       if (hit) matchupHitByUser.add(userId);
+
+      // ── Bracket slot (exact-pair lookup for Pronóstico scoring) ────────────
+      if (stageDefs) {
+        for (const def of stageDefs) {
+          const h = resolved[def.id]?.home?.tla, a = resolved[def.id]?.away?.tla;
+          if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) {
+            bracketSlotByUser[userId] = def.id;
+            break;
+          }
+        }
+      } else if (stage === 'final') {
+        const h = resolved['final']?.home?.tla, a = resolved['final']?.away?.tla;
+        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) bracketSlotByUser[userId] = 'final';
+      } else if (stage === 'thirdPlace') {
+        const h = resolved['3rd']?.home?.tla, a = resolved['3rd']?.away?.tla;
+        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) bracketSlotByUser[userId] = '3rd';
+      }
     }
   }
 
   // 1. Live knockout predictions (PredictionsPage → 'predictions' collection)
-  //    Apply pre-tournament scoring rates when the user predicted this exact matchup in their bracket
+  //    Apply pre-tournament scoring rates when the user's bracket has the matchup hit.
   const predsSnap = await getDocs(query(collection(db, 'predictions'), where('matchId', '==', String(matchId))));
   predsSnap.forEach((predDoc) => {
     const pred = predDoc.data();
@@ -386,7 +416,7 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
       { scoreA: pred.predictedScoreA, scoreB: pred.predictedScoreB },
       { scoreA, scoreB },
       stage,
-      matchupHit, // isPreTournament=true → use scaled per-round rates
+      matchupHit,
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
     const tier = resultTier(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
@@ -411,25 +441,23 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
     affectedUserIds.add(pred.userId);
   });
 
-  // 3. Bracket knockout score predictions (FixturePage → 'preTournamentBracket' flat fields ks_{matchId}_A/B)
-  //    Uses scaled per-round scoring (isPreTournament=true)
+  // 3. Bracket knockout score predictions (FixturePage → 'preTournamentBracket' ks_{slotId}_A/B)
+  //    Only scored for users whose bracket slot has the exact matching team pair.
+  //    Always uses pre-tournament rates since these were made before the tournament.
   const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'));
   bracketSnap.forEach((bracketDoc) => {
     const data = bracketDoc.data();
-    const predA = data[`ks_${matchId}_A`];
-    const predB = data[`ks_${matchId}_B`];
-    if (predA !== undefined && predB !== undefined && predA !== null && predB !== null) {
-      const points = computeMatchPoints(
-        { scoreA: predA, scoreB: predB },
-        { scoreA, scoreB },
-        stage,
-        true,
-      );
-      const isExact = isExactScore(predA, predB, scoreA, scoreB);
-      const tier = resultTier(predA, predB, scoreA, scoreB);
-      batch.update(bracketDoc.ref, { [`ksp_${matchId}`]: points, [`kse_${matchId}`]: isExact, [`kst_${matchId}`]: tier });
-      if (data.userId) affectedUserIds.add(data.userId);
-    }
+    const userId = data.userId || bracketDoc.id;
+    const slotId = bracketSlotByUser[userId];
+    if (!slotId) return;
+    const predA = data[`ks_${slotId}_A`];
+    const predB = data[`ks_${slotId}_B`];
+    if (predA === null || predA === undefined || predB === null || predB === undefined) return;
+    const points = computeMatchPoints({ scoreA: predA, scoreB: predB }, { scoreA, scoreB }, stage, true);
+    const isExact = isExactScore(predA, predB, scoreA, scoreB);
+    const tier = resultTier(predA, predB, scoreA, scoreB);
+    batch.update(bracketDoc.ref, { [`ksp_${slotId}`]: points, [`kse_${slotId}`]: isExact, [`kst_${slotId}`]: tier });
+    affectedUserIds.add(userId);
   });
 
   await batch.commit();

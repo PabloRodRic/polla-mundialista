@@ -4,6 +4,8 @@ import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
 import { subscribeToGroupPredictions, subscribeToBracket } from '../services/preTournamentService';
 import { compareLeaderboard, rankPlayers } from '../utils/leaderboard';
+import { resolveFullBracket, buildTeamLookup, BRACKET_R32, BRACKET_R16, BRACKET_QF, BRACKET_SF } from '../utils/bracketUtils';
+import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
 
 const TournamentDataContext = createContext(null);
 
@@ -110,6 +112,100 @@ export function TournamentDataProvider({ children }) {
   }, [matches]);
   const tournamentStarted = firstGroupMatchDate ? new Date() >= firstGroupMatchDate : false;
 
+  // Derived from the current user's resolved Pronóstico bracket vs the real fixtures:
+  //   bracketMatchupIds    — real matchIds where BOTH real teams appear in the user's
+  //                          bracket at that stage (a "matchup hit"). Keyed for the
+  //                          real-match surfaces (Partidos / Llaves).
+  //   bracketMatchupSlotIds — bracket slot ids (r32_01… / 'final' / '3rd') whose
+  //                          resolved pairing equals a real match. Keyed for the
+  //                          Pronóstico bracket surface (FixturePage), whose cards are
+  //                          slots, not real matches.
+  //   bracketPredByMatchId — the user's bracket score prediction for the slot whose
+  //                          resolved pairing equals the real match (exact pair).
+  // All mirror the scoring logic in matchSync._writePredictionPoints so the UI and
+  // the awarded points always agree.
+  const { bracketMatchupIds, bracketMatchupSlotIds, bracketPredByMatchId } = useMemo(() => {
+    const empty = { bracketMatchupIds: new Set(), bracketMatchupSlotIds: new Set(), bracketPredByMatchId: {} };
+    if (!myBracket) return empty;
+    const groupMatchesList = matches.filter((m) => m.stage === 'group');
+    if (!groupMatchesList.length) return empty;
+
+    const teamsByTla = buildTeamLookup(groupMatchesList);
+    const matchesByGroup = {};
+    for (const m of groupMatchesList) {
+      if (m.group) (matchesByGroup[m.group] ||= []).push(m);
+    }
+    const standings = {};
+    for (const [g, gms] of Object.entries(matchesByGroup)) {
+      const teamMap = {};
+      for (const m of gms) {
+        teamMap[m.tlaA] = { tla: m.tlaA, name: m.teamA, flag: m.flagA };
+        teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB };
+      }
+      standings[g] = computeGroupStandings(Object.values(teamMap), gms, groupPreds);
+    }
+    const best3rd = getBest3rdPlaceTeams(standings);
+    const resolved = resolveFullBracket(standings, best3rd, myBracket, teamsByTla);
+
+    // Teams the user predicted to reach each stage: R32 = the round's participants,
+    // R16/QF/SF = the previous round's winners, final = the two SF winners, 3rd = the
+    // resolved 3rd-place pair.
+    const add = (set, tla) => { if (tla) set.add(tla); };
+    const stageTeams = {
+      roundOf32: new Set(), roundOf16: new Set(), quarterfinals: new Set(),
+      semifinals: new Set(), final: new Set(), thirdPlace: new Set(),
+    };
+    for (const def of BRACKET_R32) {
+      add(stageTeams.roundOf32, resolved[def.id]?.home?.tla);
+      add(stageTeams.roundOf32, resolved[def.id]?.away?.tla);
+      add(stageTeams.roundOf16, resolved[def.id]?.winner);
+    }
+    for (const def of BRACKET_R16) add(stageTeams.quarterfinals, resolved[def.id]?.winner);
+    for (const def of BRACKET_QF) add(stageTeams.semifinals, resolved[def.id]?.winner);
+    add(stageTeams.final, resolved['sf_1']?.winner);
+    add(stageTeams.final, resolved['sf_2']?.winner);
+    add(stageTeams.thirdPlace, resolved['3rd']?.home?.tla);
+    add(stageTeams.thirdPlace, resolved['3rd']?.away?.tla);
+
+    // The bracket slot whose resolved pairing equals a given real match (exact pair).
+    const SLOT_DEFS = { roundOf32: BRACKET_R32, roundOf16: BRACKET_R16, quarterfinals: BRACKET_QF, semifinals: BRACKET_SF };
+    const isPair = (slotId, tlaA, tlaB) => {
+      const h = resolved[slotId]?.home?.tla, a = resolved[slotId]?.away?.tla;
+      return !!(h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA)));
+    };
+    const slotForMatch = (m) => {
+      const defs = SLOT_DEFS[m.stage];
+      if (defs) return defs.find((def) => isPair(def.id, m.tlaA, m.tlaB))?.id ?? null;
+      if (m.stage === 'final') return isPair('final', m.tlaA, m.tlaB) ? 'final' : null;
+      if (m.stage === 'thirdPlace') return isPair('3rd', m.tlaA, m.tlaB) ? '3rd' : null;
+      return null;
+    };
+
+    const bracketMatchupIds = new Set();
+    const bracketMatchupSlotIds = new Set();
+    const bracketPredByMatchId = {};
+    for (const m of matches) {
+      if (!m.tlaA || !m.tlaB) continue;
+
+      const teams = stageTeams[m.stage];
+      if (teams?.has(m.tlaA) && teams.has(m.tlaB)) bracketMatchupIds.add(m.id);
+
+      // A slot whose resolved pairing equals this real match: the real teams sit
+      // exactly where the user placed them, so it's also a matchup hit on the
+      // bracket surface. (Always a subset of bracketMatchupIds.)
+      const slotId = slotForMatch(m);
+      if (!slotId) continue;
+      bracketMatchupSlotIds.add(slotId);
+
+      const scoreA = myBracket[`ks_${slotId}_A`];
+      const scoreB = myBracket[`ks_${slotId}_B`];
+      if (scoreA == null || scoreB == null) continue;
+      bracketPredByMatchId[m.id] = { scoreA, scoreB, points: myBracket[`ksp_${slotId}`] ?? null };
+    }
+
+    return { bracketMatchupIds, bracketMatchupSlotIds, bracketPredByMatchId };
+  }, [myBracket, matches, groupPreds]);
+
   // Tie-aware ranks parallel to `players`, plus a quick lookup for the current user.
   const ranks = useMemo(() => rankPlayers(players), [players]);
   const currentUserIndex = user ? players.findIndex((p) => p.id === user.uid) : -1;
@@ -123,6 +219,9 @@ export function TournamentDataProvider({ children }) {
     livePreds,
     userPreds,
     myBracket,
+    bracketMatchupIds,
+    bracketMatchupSlotIds,
+    bracketPredByMatchId,
     firstGroupMatchDate,
     tournamentStarted,
     players,

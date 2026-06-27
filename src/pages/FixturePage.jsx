@@ -409,6 +409,7 @@ function KnockoutMatchCard({
   matchNo,
   saving,
   onShowBets,
+  bracketMatchup,
 }) {
   const [scoreA, setScoreA] = useState(propScoreA ?? null);
   const [scoreB, setScoreB] = useState(propScoreB ?? null);
@@ -518,20 +519,32 @@ function KnockoutMatchCard({
       style={{
         background: 'var(--color-surface-card)',
         border: `1px solid ${
-          effectiveWinner
-            ? 'var(--color-pitch)'
-            : bothKnown && !locked
-              ? 'var(--color-accent-red)'
-              : 'var(--color-border)'
+          bracketMatchup
+            ? 'rgba(212,168,67,0.5)'
+            : effectiveWinner
+              ? 'var(--color-pitch)'
+              : bothKnown && !locked
+                ? 'var(--color-accent-red)'
+                : 'var(--color-border)'
         }`,
       }}
     >
       {/* Match number + date + saving + bets */}
       <div className='flex items-center justify-between mb-2'>
-        <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
-          {matchNo && <span style={{ fontWeight: 600 }}>Partido {matchNo}</span>}
-          {matchNo && matchDate && ' · '}
-          {matchDate && formatDate(matchDate)}
+        <span className='text-xs flex items-center gap-2' style={{ color: 'var(--color-text-muted)' }}>
+          <span>
+            {matchNo && <span style={{ fontWeight: 600 }}>Partido {matchNo}</span>}
+            {matchNo && matchDate && ' · '}
+            {matchDate && formatDate(matchDate)}
+          </span>
+          {bracketMatchup && (
+            <span
+              className='text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0'
+              style={{ background: 'rgba(212,168,67,0.15)', color: 'var(--color-gold)' }}
+            >
+              ✦ llave
+            </span>
+          )}
         </span>
         <div className='flex items-center gap-1.5'>
           {saving && (
@@ -984,6 +997,7 @@ export default function TournamentPage() {
     matchesLoading: loading,
     groupPreds: groupPredictions,
     tournamentStarted: tournamentLocked,
+    bracketMatchupSlotIds,
   } = useTournamentData();
   const [bracketData, setBracketData] = useState(null);
 
@@ -1536,6 +1550,7 @@ export default function TournamentPage() {
                         matchNo={def.match}
                         saving={savingMatch[def.id] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has(def.id)}
                       />
                     );
                   })}
@@ -1578,6 +1593,7 @@ export default function TournamentPage() {
                         matchNo={def.match}
                         saving={savingMatch[def.id] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has(def.id)}
                       />
                     );
                   })}
@@ -1620,6 +1636,7 @@ export default function TournamentPage() {
                         matchNo={def.match}
                         saving={savingMatch[def.id] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has(def.id)}
                       />
                     );
                   })}
@@ -1662,6 +1679,7 @@ export default function TournamentPage() {
                         matchNo={def.match}
                         saving={savingMatch[def.id] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has(def.id)}
                       />
                     );
                   })}
@@ -1703,6 +1721,7 @@ export default function TournamentPage() {
                         matchNo={BRACKET_3RD.match}
                         saving={savingMatch['3rd'] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has('3rd')}
                       />
                     </>
                   );
@@ -1746,6 +1765,7 @@ export default function TournamentPage() {
                         matchNo={BRACKET_FINAL.match}
                         saving={savingMatch['final'] || false}
                         onShowBets={openBets}
+                        bracketMatchup={bracketMatchupSlotIds.has('final')}
                       />
                     </>
                   );

@@ -1,12 +1,10 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef } from 'react';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
-import { resolveFullBracket, buildTeamLookup, BRACKET_R32, BRACKET_R16, BRACKET_QF, BRACKET_SF } from '../utils/bracketUtils';
-import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
 import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
@@ -136,7 +134,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup, bracketPred }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -283,19 +281,35 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
         </p>
       )}
 
-      {/* Real result (if finished or live) */}
+      {/* Real result + predictions (if finished or live) */}
       {(finished || match.status === 'live') && match.scoreA !== null && (
-        <div
-          className='mt-3 pt-3 flex items-center justify-center gap-2 text-xs'
-          style={{ borderTop: '1px solid var(--color-border)' }}
-        >
-          <span style={{ color: 'var(--color-text-muted)' }}>
-            {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
-          </span>
-          <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-            {match.scoreA} – {match.scoreB}
-          </span>
-          <PointsBadge points={prediction?.pointsEarned} />
+        <div className='mt-3 pt-3 text-xs' style={{ borderTop: '1px solid var(--color-border)' }}>
+          <div className='flex items-center justify-center gap-2 mb-1'>
+            <span style={{ color: 'var(--color-text-muted)' }}>
+              {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
+            </span>
+            <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+              {match.scoreA} – {match.scoreB}
+            </span>
+          </div>
+          <div className='flex items-center justify-center gap-4'>
+            <div className='flex items-center gap-1.5'>
+              <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
+              <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                {prediction?.predictedScoreA ?? '–'} – {prediction?.predictedScoreB ?? '–'}
+              </span>
+              <PointsBadge points={prediction?.pointsEarned} />
+            </div>
+            {bracketPred && (
+              <div className='flex items-center gap-1.5'>
+                <span style={{ color: 'var(--color-gold)', opacity: 0.8 }}>Pronóstico:</span>
+                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                  {bracketPred.scoreA} – {bracketPred.scoreB}
+                </span>
+                <PointsBadge points={bracketPred.points} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -339,8 +353,8 @@ export default function PredictionsPage() {
     matches: allMatches,
     matchesLoading: loading,
     livePreds: predictions,
-    myBracket,
-    groupPreds,
+    bracketMatchupIds,
+    bracketPredByMatchId,
     firstGroupMatchDate: tournamentStart,
     tournamentStarted,
   } = useTournamentData();
@@ -380,50 +394,6 @@ export default function PredictionsPage() {
 
   // This tab only predicts knockout fixtures.
   const matches = allMatches.filter((m) => KNOCKOUT_STAGES.includes(m.stage));
-
-  // Resolve the user's pre-tournament bracket to get predicted team pairs per stage.
-  // Recomputes only when bracket data or group predictions change.
-  const bracketMatchupsByStage = useMemo(() => {
-    if (!myBracket) return {};
-    const groupMatchesList = allMatches.filter((m) => m.stage === 'group');
-    if (!groupMatchesList.length) return {};
-
-    const teamsByTla = buildTeamLookup(groupMatchesList);
-    const matchesByGroup = {};
-    for (const m of groupMatchesList) {
-      if (m.group) (matchesByGroup[m.group] ||= []).push(m);
-    }
-    const standings = {};
-    for (const [g, gms] of Object.entries(matchesByGroup)) {
-      const teamMap = {};
-      for (const m of gms) {
-        teamMap[m.tlaA] = { tla: m.tlaA, name: m.teamA, flag: m.flagA };
-        teamMap[m.tlaB] = { tla: m.tlaB, name: m.teamB, flag: m.flagB };
-      }
-      standings[g] = computeGroupStandings(Object.values(teamMap), gms, groupPreds);
-    }
-    const best3rd = getBest3rdPlaceTeams(standings);
-    const resolved = resolveFullBracket(standings, best3rd, myBracket, teamsByTla);
-
-    const result = {};
-    const add = (stage, h, a) => {
-      if (!h || !a) return;
-      (result[stage] ||= new Set()).add([h, a].sort().join('-'));
-    };
-    for (const def of BRACKET_R32) add('roundOf32', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
-    for (const def of BRACKET_R16) add('roundOf16', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
-    for (const def of BRACKET_QF) add('quarterfinals', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
-    for (const def of BRACKET_SF) add('semifinals', resolved[def.id]?.home?.tla, resolved[def.id]?.away?.tla);
-    add('final', resolved['final']?.home?.tla, resolved['final']?.away?.tla);
-    add('thirdPlace', resolved['3rd']?.home?.tla, resolved['3rd']?.away?.tla);
-    return result;
-  }, [myBracket, allMatches, groupPreds]);
-
-  function getBracketMatchup(match) {
-    if (!match.tlaA || !match.tlaB) return null;
-    const pair = [match.tlaA, match.tlaB].sort().join('-');
-    return bracketMatchupsByStage[match.stage]?.has(pair) ? pair : null;
-  }
 
   async function writePrediction(matchId, scoreA, scoreB, penaltyWinner = null) {
     setSaving((s) => ({ ...s, [matchId]: true }));
@@ -599,7 +569,8 @@ export default function PredictionsPage() {
                   onShowStatus={openStatus}
                   matchNumber={matchNumberById[m.id]}
                   isAdmin={isAdmin}
-                  bracketMatchup={getBracketMatchup(m)}
+                  bracketMatchup={bracketMatchupIds.has(m.id)}
+                  bracketPred={bracketPredByMatchId[m.id] ?? null}
                 />
               ))}
             </div>
