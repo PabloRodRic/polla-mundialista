@@ -311,8 +311,8 @@ function MatchOverrideCard({ match, onSave, onShowStatus }) {
         />
       </div>
 
-      {/* Penalty winner — shown for finished knockout matches so admin can record shootout result */}
-      {status === 'finished' && match.stage !== 'group' && (
+      {/* Penalty winner — only shown when knockout match ends tied (scores equal) */}
+      {status === 'finished' && match.stage !== 'group' && scoreA !== '' && scoreB !== '' && Number(scoreA) === Number(scoreB) && (
         <div className='flex items-center gap-2 mb-3'>
           <span className='text-xs' style={{ color: 'var(--color-text-muted)' }}>
             Ganador (penales):
