@@ -3,10 +3,19 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
-import { fetchOthersBets } from '../services/preTournamentService';
+import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
+import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
 import PointsBadge from '../components/PointsBadge';
+
+// Live (knockout) predictions lock one hour before that specific match's kickoff.
+// Mirrors PredictionsPage so the two screens agree on when bets become visible.
+function isLiveLocked(match) {
+  if (!match.date?.toDate) return false;
+  const kickoff = match.date.toDate();
+  return new Date() >= new Date(kickoff.getTime() - 1 * 60 * 60 * 1000);
+}
 
 const STAGE_LABELS = {
   group: 'Fase de Grupos',
@@ -76,11 +85,21 @@ function TeamFlag({ match, side }) {
   return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />;
 }
 
-function MatchCard({ match, onShowBets, betsLocked, prediction, bracketMatchup, bracketPred }) {
+function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin, prediction, bracketMatchup, bracketPred }) {
   const pA = prediction?.predictedScoreA;
   const pB = prediction?.predictedScoreB;
   const hasPrediction = pA != null && pB != null;
   const scored = match.status === 'finished' || match.status === 'live';
+
+  // When are this match's bets locked (and therefore safe to reveal to everyone)?
+  //   group    → all group bets lock together when the tournament kicks off.
+  //   knockout → live bets lock one hour before this specific match.
+  const isGroup = match.stage === 'group';
+  const locked = isGroup ? tournamentStarted : isLiveLocked(match);
+  // Non-admins can only open after lock. The admin can peek early, but only for
+  // knockout matches and only at the "who has / hasn't bet" status — never the
+  // actual predictions — until the match locks.
+  const adminCanPreview = isAdmin && !isGroup;
   return (
     <div
       className='rounded-xl p-4 mb-3'
@@ -107,7 +126,10 @@ function MatchCard({ match, onShowBets, betsLocked, prediction, bracketMatchup, 
         </div>
         <div className='flex items-center gap-2'>
           <StatusBadge status={match.status} />
-          <BetsIconButton disabled={!betsLocked} onClick={() => onShowBets(match)} />
+          <BetsIconButton
+            disabled={!locked && !adminCanPreview}
+            onClick={() => (adminCanPreview && !locked ? onShowStatus(match) : onShowBets(match))}
+          />
         </div>
       </div>
 
@@ -220,13 +242,14 @@ function SkeletonCard() {
 }
 
 export default function MatchesPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = !!profile?.isAdmin;
   // Matches, the user's merged predictions and the tournament-lock state all come
   // from the shared TournamentData subscription (no per-page re-fetch / re-derive).
-  const { matches, matchesLoading: loading, userPreds, bracketMatchupIds, bracketPredByMatchId, tournamentStarted: betsLocked } = useTournamentData();
+  const { matches, matchesLoading: loading, userPreds, bracketMatchupIds, bracketPredByMatchId, tournamentStarted } = useTournamentData();
   const [filter, setFilter] = useState(DEFAULT_TIME_FILTER);
 
-  // "Ver pronósticos de otros" popup
+  // "Ver pronósticos de otros" popup (post-lock, all users)
   const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'group' });
   const [betsData, setBetsData] = useState([]);
   const [betsLoading, setBetsLoading] = useState(false);
@@ -243,6 +266,22 @@ export default function MatchesPage() {
       .then(setBetsData)
       .catch(() => setBetsData([]))
       .finally(() => setBetsLoading(false));
+  }
+
+  // Admin-only "who's missing" popup (pre-lock, knockout matches only)
+  const [statusModal, setStatusModal] = useState({ open: false, title: '' });
+  const [statusRows, setStatusRows] = useState([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  function openStatus(match) {
+    const title = `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`;
+    setStatusModal({ open: true, title });
+    setStatusRows([]);
+    setStatusLoading(true);
+    fetchMatchPredictionStatus(match.id)
+      .then(setStatusRows)
+      .catch(() => setStatusRows([]))
+      .finally(() => setStatusLoading(false));
   }
 
   // Filter matches by the shared time-based filter (Hoy / Próximos / Finalizados / Todos)
@@ -304,7 +343,9 @@ export default function MatchesPage() {
                 key={m.id}
                 match={m}
                 onShowBets={openBets}
-                betsLocked={betsLocked}
+                onShowStatus={openStatus}
+                tournamentStarted={tournamentStarted}
+                isAdmin={isAdmin}
                 prediction={userPreds[m.id]}
                 bracketMatchup={bracketMatchupIds.has(m.id)}
                 bracketPred={bracketPredByMatchId[m.id] ?? null}
@@ -325,6 +366,13 @@ export default function MatchesPage() {
         homeFlag={betsMatch?.flagA}
         awayFlag={betsMatch?.flagB}
         showPoints={betsMatch?.status === 'finished' || betsMatch?.status === 'live'}
+      />
+      <PredictionStatusModal
+        open={statusModal.open}
+        onClose={() => setStatusModal((m) => ({ ...m, open: false }))}
+        title={statusModal.title}
+        rows={statusRows}
+        loading={statusLoading}
       />
     </div>
   );
