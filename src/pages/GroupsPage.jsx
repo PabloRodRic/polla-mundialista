@@ -258,7 +258,12 @@ function GroupCard({ group, matches, groupPreds, myBracket }) {
 }
 
 function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
-  const allGroupsDone = ALL_GROUPS.every(g => myBracket?.[`gsp_${g}_done`]);
+  // A group is finished once all 6 of its matches are finished. Derive this from the
+  // actual match data — there is no persisted per-group "done" flag.
+  const allGroupsDone = ALL_GROUPS.every(g => {
+    const ms = matchesByGroup[g] || [];
+    return ms.length === 6 && ms.every(m => m.status === 'finished');
+  });
 
   // Compute actual 3rd place team per group from real scores
   const allActualStandings = useMemo(() => {

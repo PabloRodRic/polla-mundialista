@@ -537,15 +537,12 @@ async function calculateGroupStandingsPoints(group) {
 
   const advR32Pts = scoring.knockout.teamAdvancement.roundOf32;
   const actualQualifiers = [actualStandings[0]?.tla, actualStandings[1]?.tla].filter(Boolean);
+  // The 3rd-place team's R32 advancement is owned by the best-3rd pass (it can only be
+  // resolved once all 12 groups finish). This group owns the top-2 advancement credit;
+  // anyone else (4th) can never advance, so their key is cleared of any stale credit
+  // left over from an earlier standing (e.g. a team that was top 2 before a correction).
+  const thirdTla = actualStandings[2]?.tla;
   const fs = scoring.groupStage.finalStandings;
-
-  // Best-3rd R32 advancement is scored separately once all 12 groups finish.
-  // Until then, this group owns the R32 credit only for its actual top 2 — any
-  // team that's no longer top 2 (e.g. because results were later corrected) must
-  // have its stale credit cleared. Don't touch these keys after best3rd_done,
-  // since that pass owns the 3rd-place advancement credit.
-  const scoreStateSnap = await getDoc(doc(db, 'config', 'scoringState'));
-  const best3rdDone = !!scoreStateSnap.data()?.['best3rd_done'];
 
   for (const [userId, userPreds] of Object.entries(predsByUser)) {
     const predictedStandings = computeGroupStandings(teams, groupMatches, userPreds);
@@ -563,7 +560,7 @@ async function calculateGroupStandingsPoints(group) {
       const tla = team.tla;
       if (actualQualifiers.includes(tla)) {
         updates[`adv_roundOf32_${tla}`] = predictedQualifiers.has(tla) ? advR32Pts : 0;
-      } else if (!best3rdDone) {
+      } else if (tla !== thirdTla) {
         updates[`adv_roundOf32_${tla}`] = deleteField();
       }
     }
@@ -583,8 +580,6 @@ async function calculateGroupStandingsPoints(group) {
 // R32 advancement for best 3rd-place qualifiers — runs only after all 12 groups are finished
 async function calculateBest3rdAdvancementIfReady() {
   const scoreStateRef = doc(db, 'config', 'scoringState');
-  const scoreStateSnap = await getDoc(scoreStateRef);
-  if (scoreStateSnap.data()?.['best3rd_done']) return;
 
   // Fetch all group matches to compute actual standings per group
   const allGroupMatchesSnap = await getDocs(query(collection(db, 'matches'), where('stage', '==', 'group')));
@@ -618,6 +613,20 @@ async function calculateBest3rdAdvancementIfReady() {
 
   const actualBest3rd = getBest3rdPlaceTeams(allActualStandings);
   const actualBest3rdSet = new Set(actualBest3rd.map((t) => t.tla));
+  // Every group's 3rd-place team — the 8 that advance get credit, the rest get any
+  // stale advancement credit cleared. (The per-group pass deliberately leaves the
+  // 3rd-place team untouched, so this pass is the sole owner of those keys.)
+  const allThirdTlas = Object.values(allActualStandings).map((s) => s[2]?.tla).filter(Boolean);
+
+  // Re-run only when the third-place configuration changes (which team is 3rd in each
+  // group and whether it qualified). Group predictions are locked pre-tournament, so the
+  // credit can only change when real results do. This replaces a sticky boolean flag,
+  // which could permanently block scoring if it was ever set before the real results came in.
+  const best3rdSignature = allGroups
+    .map((g) => `${g}:${allActualStandings[g]?.[2]?.tla ?? ''}:${actualBest3rdSet.has(allActualStandings[g]?.[2]?.tla) ? 1 : 0}`)
+    .join('|');
+  const scoreStateSnap = await getDoc(scoreStateRef);
+  if (scoreStateSnap.data()?.['best3rd_signature'] === best3rdSignature) return;
 
   // Fetch all group predictions to compute each user's predicted best-3rd
   const allGroupPredsSnap = await getDocs(collection(db, 'preTournamentGroupPredictions'));
@@ -668,9 +677,14 @@ async function calculateBest3rdAdvancementIfReady() {
     );
 
     const updates = {};
-    for (const tla of actualBest3rdSet) {
-      // Credit users who predicted the team to advance either as a best-3rd OR in their group's top 2
-      updates[`adv_roundOf32_${tla}`] = (predictedBest3rdSet.has(tla) || predictedTop2Set.has(tla)) ? advR32Pts : 0;
+    for (const tla of allThirdTlas) {
+      if (actualBest3rdSet.has(tla)) {
+        // Credit users who predicted the team to advance either as a best-3rd OR in their group's top 2
+        updates[`adv_roundOf32_${tla}`] = (predictedBest3rdSet.has(tla) || predictedTop2Set.has(tla)) ? advR32Pts : 0;
+      } else {
+        // 3rd-place team that did NOT advance — clear any stale advancement credit.
+        updates[`adv_roundOf32_${tla}`] = deleteField();
+      }
     }
     if (Object.keys(updates).length > 0) {
       batch.update(bracketDoc.ref, updates);
@@ -678,7 +692,7 @@ async function calculateBest3rdAdvancementIfReady() {
     }
   });
 
-  await setDoc(scoreStateRef, { best3rd_done: true }, { merge: true });
+  await setDoc(scoreStateRef, { best3rd_signature: best3rdSignature }, { merge: true });
   await batch.commit();
 
   await recalcUsers(affectedUserIds);
