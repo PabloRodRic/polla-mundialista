@@ -433,6 +433,19 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
                 >
                   {advPts > 0 ? `+${advPts}` : '0'}
                 </span>
+              ) : qualifies && userPicked ? (
+                // Currently a qualifying best-3rd the user predicted — preview the points
+                // they'd earn if standings hold (not yet awarded until all groups finish).
+                <span
+                  className='text-[11px] font-bold px-1.5 py-0.5 rounded-full'
+                  style={{
+                    background: 'rgba(76,175,114,0.15)',
+                    color: '#4caf72',
+                    border: '1px solid rgba(76,175,114,0.3)',
+                  }}
+                >
+                  +{ADV_PTS}
+                </span>
               ) : (
                 <span
                   className='text-[10px] px-1.5 py-0.5 rounded-full'
