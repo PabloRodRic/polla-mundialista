@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
-import { computeGroupStandings, getBest3rdPlaceTeams } from '../utils/standingsCalculator';
+import { computeGroupStandings } from '../utils/standingsCalculator';
 import scoring from '../config/scoring.json';
 
 const ALL_GROUPS = 'ABCDEFGHIJKL'.split('');
@@ -299,8 +298,6 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
     });
   }, [allActualStandings]);
 
-  if (thirds.length === 0) return null;
-
   // Predicted 3rd-place teams per group (user's perspective)
   const userPredictedR32Qualifiers = useMemo(() => {
     const thirdCandidates = [];
@@ -332,6 +329,8 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
     // A user "predicted" a best-3rd to advance if they had them in top 2 OR among their best 8 thirds
     return { best3rdSet, top2Set };
   }, [matchesByGroup, groupPreds]);
+
+  if (thirds.length === 0) return null;
 
   return (
     <div className='rounded-2xl overflow-hidden mb-4' style={{ border: '1px solid var(--color-border)' }}>
@@ -519,7 +518,6 @@ function ScoringInfo() {
 }
 
 export default function GroupsPage() {
-  const { user } = useAuth();
   const { matches, groupPreds, myBracket } = useTournamentData();
 
   const matchesByGroup = useMemo(() => {
