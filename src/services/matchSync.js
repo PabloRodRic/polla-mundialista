@@ -9,6 +9,7 @@ import {
   Timestamp,
   updateDoc,
   setDoc,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { fetchAllMatches } from './footballApi';
@@ -538,6 +539,14 @@ async function calculateGroupStandingsPoints(group) {
   const actualQualifiers = [actualStandings[0]?.tla, actualStandings[1]?.tla].filter(Boolean);
   const fs = scoring.groupStage.finalStandings;
 
+  // Best-3rd R32 advancement is scored separately once all 12 groups finish.
+  // Until then, this group owns the R32 credit only for its actual top 2 — any
+  // team that's no longer top 2 (e.g. because results were later corrected) must
+  // have its stale credit cleared. Don't touch these keys after best3rd_done,
+  // since that pass owns the 3rd-place advancement credit.
+  const scoreStateSnap = await getDoc(doc(db, 'config', 'scoringState'));
+  const best3rdDone = !!scoreStateSnap.data()?.['best3rd_done'];
+
   for (const [userId, userPreds] of Object.entries(predsByUser)) {
     const predictedStandings = computeGroupStandings(teams, groupMatches, userPreds);
     // Top 2 qualify directly; 3rd can qualify via best-3rd — all three count as "predicted to advance"
@@ -550,8 +559,13 @@ async function calculateGroupStandingsPoints(group) {
     if (predictedStandings[3]?.tla === actualStandings[3]?.tla) standingPoints += fs.correct4thPlace;
 
     const updates = { userId, [`gsp_${group}`]: standingPoints };
-    for (const tla of actualQualifiers) {
-      updates[`adv_roundOf32_${tla}`] = predictedQualifiers.has(tla) ? advR32Pts : 0;
+    for (const team of teams) {
+      const tla = team.tla;
+      if (actualQualifiers.includes(tla)) {
+        updates[`adv_roundOf32_${tla}`] = predictedQualifiers.has(tla) ? advR32Pts : 0;
+      } else if (!best3rdDone) {
+        updates[`adv_roundOf32_${tla}`] = deleteField();
+      }
     }
 
     // setDoc with merge creates the doc if it doesn't exist yet

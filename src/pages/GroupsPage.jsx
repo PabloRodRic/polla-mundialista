@@ -377,7 +377,9 @@ function Best3rdCard({ matchesByGroup, groupPreds, myBracket }) {
         const qualifies = i < 8;
         const userPicked = userPredictedR32Qualifiers.best3rdSet.has(team.tla) || userPredictedR32Qualifiers.top2Set.has(team.tla);
         const advPts = myBracket?.[`adv_roundOf32_${team.tla}`];
-        const advScored = advPts !== undefined;
+        // Best-3rd R32 advancement is only awarded once every group is finished.
+        // Until then show the pending pick indicator, never an (possibly stale) score.
+        const advScored = allGroupsDone && advPts !== undefined;
 
         return (
           <div
