@@ -209,26 +209,6 @@ export async function syncMatchesFromAPI() {
         delete toWrite.winner;
       }
 
-      // If admin has manually set the kickoff time, keep it — the API schedule for
-      // this match is wrong/stale (e.g. a knockout slot whose date never corrected).
-      // Cleared via "Quitar hora" in the admin panel so the API time flows again.
-      if (prev?.adminTimeOverride) {
-        delete toWrite.date;
-      }
-
-      // If admin has manually set teams for this slot, don't clobber with API data
-      // Admin must explicitly click "Quitar override" to let API data flow in again
-      if (prev?.adminTeamOverride) {
-        delete toWrite.teamA;
-        delete toWrite.teamB;
-        delete toWrite.tlaA;
-        delete toWrite.tlaB;
-        delete toWrite.flagA;
-        delete toWrite.flagB;
-        delete toWrite.crestA;
-        delete toWrite.crestB;
-      }
-
       // Don't overwrite confirmed team assignments with empty values — the API
       // sometimes returns blank homeTeam/awayTeam for knockout slots it hasn't
       // populated yet, which would erase teams that were correctly placed on a
@@ -317,12 +297,16 @@ export function stopAutoSync() {
 
 // isPreTournament=true uses scaled per-round scoring from preTournamentMatchResult.
 //
-// advancer (live knockout predictions only): { predicted, real } TLAs. When a real
-// knockout match is decided by penalties (the real score is a draw) and the user also
-// predicted a draw, getting the advancer wrong demotes the prediction one tier
-// (exact → goal-diff → outcome). On non-draws "who advances" is already encoded by the
-// outcome, so the demotion never applies there. Omit `advancer` (group stage, the
-// Pronóstico bracket — where advancement is scored separately) to skip it entirely.
+// advancer (live knockout predictions only): { predicted, real } TLAs — the team each
+// side names as the winner (the scoreline's winner, or the tiebreaker pick when level).
+// Two knockout-only adjustments:
+//   • Real match was a draw and the user also predicted a draw → a wrong advancer demotes
+//     the prediction one tier (exact → goal-diff → outcome).
+//   • User predicted a draw but the real match was decisive → if their pick is the team
+//     that actually won, the prediction earns the correct-outcome tier (right winner,
+//     wrong scoreline) instead of zero.
+// Omit `advancer` (group stage, the Pronóstico bracket — where advancement is scored
+// separately) to skip both entirely; groups can legitimately end level.
 export function computeMatchPoints(predicted, real, stage, isPreTournament = false, advancer = null) {
   const pA = Number(predicted.scoreA);
   const pB = Number(predicted.scoreB);
@@ -356,6 +340,15 @@ export function computeMatchPoints(predicted, real, stage, isPreTournament = fal
   // Skipped when the real advancer is unknown so a missing winner can't penalize anyone.
   if (advancer && advancer.real && tier > 0 && rResult === 0 && pResult === 0) {
     if (advancer.predicted !== advancer.real) tier -= 1;
+  }
+
+  // Knockouts have no draws: a user who predicts a level score still names a winner via
+  // the tiebreaker pick. If the real match was decided (one side won in normal/extra time)
+  // and that pick is the team that actually won, the prediction has the right winner with
+  // the wrong scoreline → credit the correct outcome. (Score/goal-diff tiers stay 0 here,
+  // since a level prediction can't match a decisive scoreline.)
+  if (advancer && advancer.real && tier === 0 && pResult === 0 && advancer.predicted === advancer.real) {
+    tier = 1;
   }
 
   if (tier === 3) return cfg.exactScore;

@@ -54,7 +54,9 @@ async function fetchScoreBets(collectionName, matchId, usersMap) {
       scoreA: data.predictedScoreA,
       scoreB: data.predictedScoreB,
       pointsEarned: data.pointsEarned ?? null,
-      pick: null,
+      // The penalty/tiebreaker winner a user picked when they predicted a draw — lets
+      // the modal highlight the chosen side even though the scoreline is level.
+      pick: data.predictedPenaltyWinner ?? null,
     })
   })
   return bets
@@ -98,6 +100,45 @@ export async function fetchOthersBets(matchId, type) {
   }
 
   // Stable order: by name so the list doesn't jump between opens
+  bets.sort((a, b) => a.name.localeCompare(b.name))
+  return bets
+}
+
+/**
+ * Live knockout bets for one match, enriched with each user's pre-tournament bracket
+ * prediction for the SAME matchup (when their resolved bracket actually has it), so the
+ * modal can star those users and show the bracket score. Heavier than fetchOthersBets
+ * (resolves every bracket) — use only for live knockout matches.
+ * `match` needs { id, tlaA, tlaB }.
+ */
+export async function fetchOthersLiveBets(match) {
+  const usersMap = await fetchUsersMap()
+  const bets = await fetchScoreBets('predictions', match.id, usersMap)
+
+  if (match.tlaA && match.tlaB) {
+    const users = await resolveAllUsersBrackets(usersMap)
+    const byUser = {}
+    for (const { userId, resolved } of users) {
+      for (const slotId of Object.keys(resolved)) {
+        const s = resolved[slotId]
+        const h = s?.home?.tla, a = s?.away?.tla
+        if (!h || !a) continue
+        if (!((h === match.tlaA && a === match.tlaB) || (h === match.tlaB && a === match.tlaA))) continue
+        if (s.scoreA == null || s.scoreB == null) break
+        const sameOrient = h === match.tlaA // align the bracket score to the real match's home/away
+        byUser[userId] = {
+          bracketScoreA: sameOrient ? s.scoreA : s.scoreB,
+          bracketScoreB: sameOrient ? s.scoreB : s.scoreA,
+        }
+        break
+      }
+    }
+    for (const b of bets) {
+      const bk = byUser[b.userId]
+      if (bk) { b.bracketScoreA = bk.bracketScoreA; b.bracketScoreB = bk.bracketScoreB }
+    }
+  }
+
   bets.sort((a, b) => a.name.localeCompare(b.name))
   return bets
 }

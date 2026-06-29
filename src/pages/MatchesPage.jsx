@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
 import { TIME_FILTERS, DEFAULT_TIME_FILTER, filterMatchesByTime } from '../utils/matchFilters';
-import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
+import { fetchOthersBets, fetchOthersLiveBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
@@ -262,7 +262,9 @@ export default function MatchesPage() {
     setBetsMatch(match);
     setBetsData([]);
     setBetsLoading(true);
-    fetchOthersBets(match.id, type)
+    // Live (knockout) bets also carry each user's bracket prediction for the matchup.
+    const load = type === 'live' ? fetchOthersLiveBets(match) : fetchOthersBets(match.id, type);
+    load
       .then(setBetsData)
       .catch(() => setBetsData([]))
       .finally(() => setBetsLoading(false));
@@ -365,6 +367,8 @@ export default function MatchesPage() {
         currentUserId={user?.uid}
         homeFlag={betsMatch?.flagA}
         awayFlag={betsMatch?.flagB}
+        homeTla={betsMatch?.tlaA}
+        awayTla={betsMatch?.tlaB}
         showPoints={betsMatch?.status === 'finished' || betsMatch?.status === 'live'}
       />
       <PredictionStatusModal

@@ -11,6 +11,6 @@ Symptom seen 2026-06-29: NED-MAR and BRA-JPN had their team labels swapped onto 
 
 **Diagnosis trick:** compare the card's displayed time (account for the user's timezone, ~UTC-4) against the API's `utcDate` per fixture id. If a card's time matches a *different* match's API time, the teams are swapped.
 
-**Fix:** in *Equipos en Llaves (R32)*, click "Quitar" on every row with the "manual" badge to drop `adminTeamOverride`, then Sincronizar — once the API has real R32 teams, "Aplicar" isn't needed at all. The slot→doc mapping in BracketTeamsCard is the latent code bug worth hardening if this recurs.
+**Resolution (2026-06-29):** the buggy *Equipos en Llaves (R32)* override feature (BracketTeamsCard / `adminTeamOverride` / `apiSnapshot*`) was **removed entirely** — teams now come solely from the API. A one-off admin-SDK migration (scratchpad `fixswap/`) swapped the affected `predictions` docs' matchId to follow the teams (orientation-checked), corrected the 6 match docs, and cleared all leftover override flags. `matchSync` no longer preserves teams/date on override. If a future round (R16+) again needs a manual matchup override because the API is late, rebuild it generically **with a correct slot→doc mapping** (the old date-order fallback is what caused the swap).
 
 The bets-visibility lock ([[#]] isLiveLocked) and live-status inference both key off the fixture's stored date, so a mislabeled live fixture leaks bets — the lock logic itself is fine.

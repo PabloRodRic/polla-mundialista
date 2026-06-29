@@ -147,7 +147,9 @@ A user **can earn points from both modes** on the same match. If their pre-tourn
 ### What counts as the result
 
 - **Group stage:** Score at full time (90 minutes + stoppage time).
-- **Knockout stage:** Score at the end of 90 minutes **plus extra time**. Penalty shootout goals do **not** count. If a match is still level after extra time (e.g. 2-2 after 120 min), the prediction result is a **draw (X)**, and the user's tiebreaker pick (penalties winner) determines bracket advancement without affecting the score tiers.
+- **Knockout stage:** Score at the end of 90 minutes **plus extra time**. Penalty shootout goals do **not** count. A knockout match always has a winner, so a level prediction must include a **tiebreaker pick (penalties winner)** — that pick is the user's predicted winner. Two consequences for scoring the user's predicted scoreline:
+  - **Real match decided** (one team won in normal/extra time) but the user predicted a level score: if their tiebreaker pick is the team that actually won, the prediction earns the **correct-outcome** tier (right winner, wrong scoreline). If the pick is the losing team, it scores 0.
+  - **Real match level after extra time** (e.g. 2-2 after 120 min): the result is a **draw (X)** for the score tiers, and the tiebreaker pick decides who advanced — getting it wrong **demotes** the prediction one tier (exact → goal-diff → outcome).
 
 ### Prediction deadlines
 

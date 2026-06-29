@@ -4,7 +4,7 @@ import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { tlaLabel } from '../utils/teamLabels';
-import { fetchOthersBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
+import { fetchOthersLiveBets, fetchMatchPredictionStatus } from '../services/preTournamentService';
 import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
@@ -53,6 +53,14 @@ function isLiveLocked(match) {
   if (!match.date?.toDate) return false;
   const kickoff = match.date.toDate();
   return new Date() >= new Date(kickoff.getTime() - 1 * 60 * 60 * 1000);
+}
+
+// A live prediction only counts as "done" when both scores are set and — for a draw —
+// a penalty/tiebreaker winner was chosen. A tie with no winner is incomplete.
+function isPredictionComplete(p) {
+  if (!p || p.predictedScoreA == null || p.predictedScoreB == null) return false;
+  if (p.predictedScoreA === p.predictedScoreB && !p.predictedPenaltyWinner) return false;
+  return true;
 }
 
 function formatDate(timestamp) {
@@ -144,7 +152,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup, bracketPred }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -231,7 +239,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
               if (isAdmin && !locked) {
                 onShowStatus({ matchId: match.id, title });
               } else {
-                onShowBets({ matchId: match.id, type: 'live', title });
+                onShowBets(match);
               }
             }}
           />
@@ -251,11 +259,15 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
         <TeamSlot match={match} side='B' />
       </div>
 
-      {/* Penalty winner picker — appears when scores are tied and match is still open */}
+      {/* Penalty winner picker — required when scores are tied and match is still open.
+          A draw isn't a complete prediction until a tiebreaker winner is chosen. */}
       {isTie && available && !locked && (
         <div className='mt-3 pt-3' style={{ borderTop: '1px solid var(--color-border)' }}>
-          <p className='text-xs text-center mb-2' style={{ color: 'var(--color-text-muted)' }}>
-            Empate — ¿quién gana por penales?
+          <p
+            className='text-xs text-center mb-2 font-semibold'
+            style={{ color: penaltyWinner ? 'var(--color-text-muted)' : 'var(--color-accent-red)' }}
+          >
+            Empate — ¿quién gana por penales?{!penaltyWinner && ' *'}
           </p>
           <div className='flex gap-2 justify-center'>
             {[{ tla: match.tlaA, flag: match.flagA, name: match.teamA }, { tla: match.tlaB, flag: match.flagB, name: match.teamB }].map((team) => (
@@ -274,6 +286,11 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
               </button>
             ))}
           </div>
+          {!penaltyWinner && (
+            <p className='text-[11px] text-center mt-2' style={{ color: 'var(--color-accent-red)' }}>
+              Elegí un ganador para completar tu predicción.
+            </p>
+          )}
         </div>
       )}
 
@@ -291,34 +308,23 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
         </p>
       )}
 
-      {/* Real result + predictions (if finished or live) */}
+      {/* Prediction + live/final score (the bracket "Pronóstico" lives in its own tab) */}
       {(finished || match.status === 'live') && match.scoreA !== null && (
         <div className='mt-3 pt-3 text-xs' style={{ borderTop: '1px solid var(--color-border)' }}>
           <div className='flex items-center justify-center gap-2 mb-1'>
+            <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
+            <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+              {prediction?.predictedScoreA ?? '–'} – {prediction?.predictedScoreB ?? '–'}
+            </span>
+            <PointsBadge points={prediction?.pointsEarned} />
+          </div>
+          <div className='flex items-center justify-center gap-2'>
             <span style={{ color: 'var(--color-text-muted)' }}>
               {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
             </span>
             <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
               {match.scoreA} – {match.scoreB}
             </span>
-          </div>
-          <div className='flex items-center justify-center gap-4'>
-            <div className='flex items-center gap-1.5'>
-              <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
-              <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                {prediction?.predictedScoreA ?? '–'} – {prediction?.predictedScoreB ?? '–'}
-              </span>
-              <PointsBadge points={prediction?.pointsEarned} />
-            </div>
-            {bracketPred && (
-              <div className='flex items-center gap-1.5'>
-                <span style={{ color: 'var(--color-gold)', opacity: 0.8 }}>Pronóstico:</span>
-                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                  {bracketPred.scoreA} – {bracketPred.scoreB}
-                </span>
-                <PointsBadge points={bracketPred.points} />
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -364,7 +370,6 @@ export default function PredictionsPage() {
     matchesLoading: loading,
     livePreds: predictions,
     bracketMatchupIds,
-    bracketPredByMatchId,
     firstGroupMatchDate: tournamentStart,
     tournamentStarted,
   } = useTournamentData();
@@ -378,12 +383,15 @@ export default function PredictionsPage() {
   const [betsModal, setBetsModal] = useState({ open: false, title: '', type: 'live' });
   const [betsData, setBetsData] = useState([]);
   const [betsLoading, setBetsLoading] = useState(false);
+  const [betsMatch, setBetsMatch] = useState(null);
 
-  function openBets({ matchId, type, title }) {
-    setBetsModal({ open: true, title, type });
+  function openBets(match) {
+    const title = `${tlaLabel(match.tlaA) || match.teamA || '?'} vs ${tlaLabel(match.tlaB) || match.teamB || '?'}`;
+    setBetsModal({ open: true, title, type: 'live' });
+    setBetsMatch(match);
     setBetsData([]);
     setBetsLoading(true);
-    fetchOthersBets(matchId, type)
+    fetchOthersLiveBets(match)
       .then(setBetsData)
       .catch(() => setBetsData([]))
       .finally(() => setBetsLoading(false));
@@ -449,7 +457,7 @@ export default function PredictionsPage() {
   const availableMatches = matches.filter(
     (m) => isLiveAvailable(m) && !isLiveLocked(m) && m.status !== 'finished' && m.status !== 'cancelled',
   );
-  const pendingCount = availableMatches.filter((m) => !predictions[m.id]).length;
+  const pendingCount = availableMatches.filter((m) => !isPredictionComplete(predictions[m.id])).length;
 
   // Default the view to the current/next stage (first stage with a non-finished match),
   // falling back to the last stage that has matches once everything is done.
@@ -495,7 +503,6 @@ export default function PredictionsPage() {
       matchNumber={matchNumberById[m.id]}
       isAdmin={isAdmin}
       bracketMatchup={bracketMatchupIds.has(m.id)}
-      bracketPred={bracketPredByMatchId[m.id] ?? null}
     />
   );
 
@@ -616,6 +623,11 @@ export default function PredictionsPage() {
         bets={betsData}
         loading={betsLoading}
         currentUserId={user?.uid}
+        homeFlag={betsMatch?.flagA}
+        awayFlag={betsMatch?.flagB}
+        homeTla={betsMatch?.tlaA}
+        awayTla={betsMatch?.tlaB}
+        showPoints={betsMatch?.status === 'finished' || betsMatch?.status === 'live'}
       />
       <PredictionStatusModal
         open={statusModal.open}

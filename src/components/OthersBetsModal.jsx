@@ -1,5 +1,9 @@
 import { tlaLabel } from '../utils/teamLabels';
 
+// Bright "go" green for the favored-side flag highlight — deliberately louder than the
+// gold accent so the picked winner is obvious at a glance.
+const GO_GREEN = '#22e06b';
+
 // Popup listing every other participant's prediction for a single match/award.
 // type 'group' | 'live' → rows show the scoreline against the fixed teams.
 // type 'knockout'       → rows show the scoreline plus the picked winner (each
@@ -18,6 +22,8 @@ export default function OthersBetsModal({
   currentUserId,
   homeFlag,
   awayFlag,
+  homeTla,
+  awayTla,
   showPoints = false,
 }) {
   if (!open) return null;
@@ -106,15 +112,18 @@ export default function OthersBetsModal({
                 // user earned, then flags around the score. The favored side (higher
                 // score) gets a gold ring so it's clear who they gave the advantage to.
                 if ((type === 'group' || type === 'live') && (homeFlag || awayFlag)) {
-                  const homeFavored = hasScore && b.scoreA > b.scoreB;
-                  const awayFavored = hasScore && b.scoreA < b.scoreB;
+                  // On a draw the favored side is the user's penalty/tiebreaker pick.
+                  const tie = hasScore && b.scoreA === b.scoreB;
+                  const homeFavored = hasScore && (b.scoreA > b.scoreB || (tie && b.pick && b.pick === homeTla));
+                  const awayFavored = hasScore && (b.scoreA < b.scoreB || (tie && b.pick && b.pick === awayTla));
+                  const hasBracket = b.bracketScoreA != null && b.bracketScoreB != null;
                   const flag = (src, favored) =>
                     src && (
                       <img
                         src={`https://flagcdn.com/w40/${src}.png`}
                         alt=''
                         className='w-5 h-3.5 object-cover rounded shrink-0'
-                        style={favored ? { boxShadow: '0 0 0 2px var(--color-gold)' } : undefined}
+                        style={favored ? { boxShadow: `0 0 0 2px ${GO_GREEN}, 0 0 7px ${GO_GREEN}99` } : undefined}
                       />
                     );
                   return (
@@ -124,9 +133,20 @@ export default function OthersBetsModal({
                       style={rowStyle}
                     >
                       {avatar}
-                      <span className='flex-1 min-w-0 font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
-                        {b.name}
-                        {isMe && <span style={{ color: 'var(--color-gold)' }}> (tú)</span>}
+                      <span className='flex-1 min-w-0 flex items-center gap-1'>
+                        <span className='font-medium truncate' style={{ color: 'var(--color-text-primary)' }}>
+                          {b.name}
+                          {isMe && <span style={{ color: 'var(--color-gold)' }}> (tú)</span>}
+                        </span>
+                        {hasBracket && (
+                          <span
+                            className='text-[10px] font-semibold whitespace-nowrap shrink-0'
+                            style={{ color: 'var(--color-gold)' }}
+                            title='También lo tiene en su pronóstico de llave'
+                          >
+                            ★ {b.bracketScoreA}–{b.bracketScoreB}
+                          </span>
+                        )}
                       </span>
                       <div className='flex items-center gap-1.5 sm:gap-2 shrink-0'>
                         {showPoints && b.pointsEarned != null && (
