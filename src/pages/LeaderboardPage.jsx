@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
-import { subscribeToAllBrackets } from '../services/preTournamentService';
+import { subscribeToAllBrackets, fetchUserMatchPointsByStage } from '../services/preTournamentService';
 import { tlaLabel } from '../utils/teamLabels';
 
 // Compute bonus breakdown from a preTournamentBracket doc
@@ -268,16 +268,16 @@ function ResultRow({ match, prediction }) {
 }
 
 const ADV_STAGES = [
-  { stage: 'roundOf32',     label: 'Clasificados 16vos', trigger: 'group' },
-  { stage: 'roundOf16',     label: 'Clasificados 8vos',  trigger: 'roundOf32' },
-  { stage: 'quarterfinals', label: 'Clasificados 4tos',  trigger: 'roundOf16' },
-  { stage: 'semifinals',    label: 'Clasificados SF',     trigger: 'quarterfinals' },
-  { stage: 'final',         label: 'Clasificados Final',  trigger: 'semifinals' },
+  { stage: 'roundOf32',     label: 'Clasificados a 16vos', trigger: 'group' },
+  { stage: 'roundOf16',     label: 'Clasificados a 8vos',  trigger: 'roundOf32' },
+  { stage: 'quarterfinals', label: 'Clasificados a 4tos',  trigger: 'roundOf16' },
+  { stage: 'semifinals',    label: 'Clasificados a SF',     trigger: 'quarterfinals' },
+  { stage: 'final',         label: 'Clasificados a Final',  trigger: 'semifinals' },
 ];
 
-function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedStages, matchPts, onClose }) {
+function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedStages, matchPointsByStage, onClose }) {
   const bonus = computeBonus(bracketData);
-  const anyGroupBonus = bonus.gsp > 0 || bonus.totalAdv > 0;
+  const anyBonus = bonus.gsp > 0 || bonus.totalAdv > 0 || bonus.ksp > 0;
 
   return (
     <div
@@ -311,18 +311,20 @@ function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedSta
 
         {/* Breakdown */}
         <div className='px-4 py-3 flex flex-col gap-0'>
-          {/* Match predictions */}
+          {/* Match predictions — per stage, mirroring "Mis Resultados" */}
           <p className='text-[10px] font-semibold uppercase tracking-wide mb-2 mt-1' style={{ color: 'var(--color-text-muted)' }}>Partidos</p>
-          <Row label='Partidos en grupos' pts={matchPts} />
-          {/* Future knockout match rows — shown when those stages have matches */}
-          {['roundOf32','roundOf16','quarterfinals','semifinals','thirdPlace','final'].map(stage =>
-            finishedStages.has(stage) ? (
-              <Row key={stage} label={STAGE_LABELS[stage]} pts={bonus.ksp} />
-            ) : null
+          {matchPointsByStage ? (
+            STAGE_SECTIONS.map(({ key, label }) =>
+              key === 'group' || finishedStages.has(key) ? (
+                <Row key={key} label={label} pts={matchPointsByStage[key] || 0} />
+              ) : null,
+            )
+          ) : (
+            <p className='text-sm py-2' style={{ color: 'var(--color-text-muted)' }}>Cargando…</p>
           )}
 
           {/* Bonus */}
-          {anyGroupBonus && (
+          {anyBonus && (
             <>
               <p className='text-[10px] font-semibold uppercase tracking-wide mb-2 mt-4' style={{ color: 'var(--color-text-muted)' }}>Adicionales</p>
               {bonus.gsp > 0 && <Row label='Posiciones en grupos' pts={bonus.gsp} gold />}
@@ -331,6 +333,7 @@ function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedSta
                   <Row key={stage} label={label} pts={bonus.adv[stage]} gold />
                 ) : null
               )}
+              {bonus.ksp > 0 && <Row label='Pronósticos de llave acertados' pts={bonus.ksp} gold />}
             </>
           )}
         </div>
@@ -382,6 +385,26 @@ export default function LeaderboardPage() {
   } = useTournamentData();
 
   useEffect(() => subscribeToAllBrackets(setAllBrackets), []);
+
+  // matchId → stage, so a selected player's match points can be split by stage
+  const stageByMatchId = useMemo(() => {
+    const m = {};
+    for (const mt of matches) m[mt.id] = mt.stage;
+    return m;
+  }, [matches]);
+
+  // Fetch the selected player's per-stage match points for the detail modal. Tagged
+  // with forId so a stale fetch can't paint the wrong player's numbers.
+  const [playerMatchPts, setPlayerMatchPts] = useState(null); // { forId, data }
+  useEffect(() => {
+    if (!selectedPlayer) return undefined;
+    let active = true;
+    const id = selectedPlayer.entry.id;
+    fetchUserMatchPointsByStage(id, stageByMatchId)
+      .then((data) => { if (active) setPlayerMatchPts({ forId: id, data }); })
+      .catch(() => { if (active) setPlayerMatchPts({ forId: id, data: null }); });
+    return () => { active = false; };
+  }, [selectedPlayer, stageByMatchId]);
 
   // Which stages have at least one finished match (controls which adv rows are visible)
   const finishedStages = useMemo(() => {
@@ -827,9 +850,7 @@ export default function LeaderboardPage() {
       {selectedPlayer && (() => {
         const { entry, rank } = selectedPlayer;
         const bracket = allBrackets[entry.id];
-        const bonus = computeBonus(bracket);
-        const bonusTotal = bonus.gsp + bonus.totalAdv + bonus.ksp + bonus.other;
-        const mPts = (entry.totalPoints ?? 0) - bonusTotal;
+        const matchPointsByStage = playerMatchPts && playerMatchPts.forId === entry.id ? playerMatchPts.data : null;
         return (
           <PlayerDetailModal
             entry={entry}
@@ -837,7 +858,7 @@ export default function LeaderboardPage() {
             rank={rank}
             totalPlayers={players.length}
             finishedStages={finishedStages}
-            matchPts={mPts}
+            matchPointsByStage={matchPointsByStage}
             onClose={() => setSelectedPlayer(null)}
           />
         );

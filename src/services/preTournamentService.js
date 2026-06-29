@@ -144,6 +144,27 @@ export async function fetchOthersLiveBets(match) {
 }
 
 /**
+ * One player's match-prediction points broken down by stage, for the leaderboard detail
+ * modal. `stageByMatchId` maps real matchId → stage (the caller already has the matches).
+ * Group-match points come from preTournamentGroupPredictions; knockout from `predictions`.
+ * Returns { group, roundOf32, roundOf16, quarterfinals, semifinals, thirdPlace, final }.
+ */
+export async function fetchUserMatchPointsByStage(userId, stageByMatchId) {
+  const out = { group: 0, roundOf32: 0, roundOf16: 0, quarterfinals: 0, semifinals: 0, thirdPlace: 0, final: 0 }
+  const [gp, lp] = await Promise.all([
+    getDocs(query(collection(db, GROUP_PREDS_COLLECTION), where('userId', '==', userId))),
+    getDocs(query(collection(db, 'predictions'), where('userId', '==', userId))),
+  ])
+  gp.forEach(d => { out.group += d.data().pointsEarned || 0 })
+  lp.forEach(d => {
+    const p = d.data()
+    const stage = stageByMatchId[String(p.matchId)]
+    if (stage && out[stage] != null) out[stage] += p.pointsEarned || 0
+  })
+  return out
+}
+
+/**
  * Resolve every participant's full knockout bracket. Heavy: reads the group
  * fixtures, all group predictions and all bracket docs, then resolves each
  * user's bracket cascade. Only users who entered group predictions are included
