@@ -488,7 +488,17 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
     const predA = data[`ks_${slotId}_A`];
     const predB = data[`ks_${slotId}_B`];
     if (predA === null || predA === undefined || predB === null || predB === undefined) return;
-    const points = computeMatchPoints({ scoreA: predA, scoreB: predB }, { scoreA, scoreB }, stage, true);
+    // Same knockout tiebreaker rule as live predictions: a level bracket score still names
+    // a winner via the slot's pick. Pass it as the advancer so a draw whose pick actually
+    // won earns the correct outcome (and a wrong pick on a real draw is demoted).
+    const predictedAdvancer = predA === predB ? (data[`pick_${slotId}`] ?? null) : null;
+    const points = computeMatchPoints(
+      { scoreA: predA, scoreB: predB },
+      { scoreA, scoreB },
+      stage,
+      true,
+      { predicted: predictedAdvancer, real: realAdvancer },
+    );
     const isExact = isExactScore(predA, predB, scoreA, scoreB);
     const tier = resultTier(predA, predB, scoreA, scoreB);
     batch.update(bracketDoc.ref, { [`ksp_${slotId}`]: points, [`kse_${slotId}`]: isExact, [`kst_${slotId}`]: tier });

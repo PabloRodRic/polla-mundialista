@@ -7,7 +7,7 @@ metadata:
 
 Knockout matches always have a winner, so a level score prediction (e.g. 2-2) is really "this team advances" via the user's `predictedPenaltyWinner`. Scoring must honor that — do NOT apply group-stage 1X2 logic where a draw prediction vs a decisive result is just a wrong outcome.
 
-`computeMatchPoints` in [matchSync.js](src/services/matchSync.js) takes an `advancer { predicted, real }` for live knockout preds and now does two things:
+`computeMatchPoints` in [matchSync.js](src/services/matchSync.js) takes an `advancer { predicted, real }`. It must be passed for **both** scoring paths in `_writePredictionPoints`: the live `predictions` (advancer = `predictedPenaltyWinner`) AND the bracket/Pronóstico `ks_` scores (advancer = the slot's `pick_`). Both were missing it at different times. It does two things:
 - **Real draw + predicted draw:** wrong pick demotes one tier (exact→GD→outcome).
 - **Real decisive + predicted draw:** if the pick == the team that actually won, award the **correct-outcome** tier (right winner, wrong scoreline) instead of 0. (Score/GD tiers can't apply — a level prediction can't match a decisive scoreline.)
 
