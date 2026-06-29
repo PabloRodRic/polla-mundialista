@@ -209,6 +209,13 @@ export async function syncMatchesFromAPI() {
         delete toWrite.winner;
       }
 
+      // If admin has manually set the kickoff time, keep it — the API schedule for
+      // this match is wrong/stale (e.g. a knockout slot whose date never corrected).
+      // Cleared via "Quitar hora" in the admin panel so the API time flows again.
+      if (prev?.adminTimeOverride) {
+        delete toWrite.date;
+      }
+
       // If admin has manually set teams for this slot, don't clobber with API data
       // Admin must explicitly click "Quitar override" to let API data flow in again
       if (prev?.adminTeamOverride) {

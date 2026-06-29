@@ -142,11 +142,34 @@ function StatusIconButton({ onClick }) {
   );
 }
 
+// Timestamp → value for a <input type="datetime-local"> in the admin's local time.
+function tsToLocalInput(ts) {
+  const d = ts?.toDate?.();
+  if (!d) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Human-readable kickoff (local time) for the admin card header.
+function formatDateTime(ts) {
+  const d = ts?.toDate?.();
+  if (!d) return 'Sin fecha';
+  return new Intl.DateTimeFormat('es', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
 function MatchOverrideCard({ match, onSave, onShowStatus }) {
   const [scoreA, setScoreA] = useState(match.scoreA ?? '');
   const [scoreB, setScoreB] = useState(match.scoreB ?? '');
   const [status, setStatus] = useState(match.status);
   const [winner, setWinner] = useState(match.winner ?? 'auto');
+  const [dateInput, setDateInput] = useState(tsToLocalInput(match.date));
+  const [savingDate, setSavingDate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -156,7 +179,42 @@ function MatchOverrideCard({ match, onSave, onShowStatus }) {
     setScoreB(match.scoreB ?? '');
     setStatus(match.status);
     setWinner(match.winner ?? 'auto');
-  }, [match.scoreA, match.scoreB, match.status, match.winner]);
+    setDateInput(tsToLocalInput(match.date));
+  }, [match.scoreA, match.scoreB, match.status, match.winner, match.date]);
+
+  // Save a manually-corrected kickoff time. Flags the match so sync won't overwrite
+  // it with the (wrong) API schedule. This is what drives the "live" inference and
+  // the 1h-before bets lock, so fixing it here fixes both Partidos and Llaves.
+  async function handleSaveDate() {
+    if (!dateInput) return;
+    setSavingDate(true);
+    try {
+      await updateDoc(doc(db, 'matches', match.id), {
+        date: Timestamp.fromDate(new Date(dateInput)),
+        adminTimeOverride: true,
+      });
+      onSave?.('Hora actualizada');
+    } catch (err) {
+      console.error('Error saving date:', err);
+      onSave?.('Error al guardar la hora', 'error');
+    } finally {
+      setSavingDate(false);
+    }
+  }
+
+  // Drop the manual time override so the next sync restores the API schedule.
+  async function handleClearDate() {
+    setSavingDate(true);
+    try {
+      await updateDoc(doc(db, 'matches', match.id), { adminTimeOverride: deleteField() });
+      onSave?.('Override de hora quitado — la API la actualizará en el próximo sync');
+    } catch (err) {
+      console.error('Error clearing date override:', err);
+      onSave?.('Error al quitar el override de hora', 'error');
+    } finally {
+      setSavingDate(false);
+    }
+  }
 
   // Auto-switch to finished when both scores are entered
   function handleScoreChange(side, val) {
@@ -263,6 +321,11 @@ function MatchOverrideCard({ match, onSave, onShowStatus }) {
           </div>
           <p className='text-xs mt-0.5' style={{ color: 'var(--color-text-muted)' }}>
             {match.stage === 'group' ? `Grupo ${match.group} · J${match.matchday}` : match.stage}
+            {' · '}
+            <span style={{ color: match.adminTimeOverride ? 'var(--color-gold)' : 'var(--color-text-secondary)' }}>
+              🕒 {formatDateTime(match.date)}
+              {match.adminTimeOverride && ' (manual)'}
+            </span>
           </p>
         </div>
         <div className='flex items-center gap-1.5 shrink-0'>
@@ -285,6 +348,49 @@ function MatchOverrideCard({ match, onSave, onShowStatus }) {
             <option value='cancelled'>Cancelado</option>
           </select>
         </div>
+      </div>
+
+      {/* Kickoff time override — fixes wrong API/stale times that drive the
+          "live" inference and the bets lock in Partidos & Llaves. */}
+      <div className='flex items-center gap-2 mb-3'>
+        <input
+          type='datetime-local'
+          value={dateInput}
+          onChange={(e) => setDateInput(e.target.value)}
+          className='flex-1 min-w-0 text-xs rounded-lg px-2 py-1.5 outline-none'
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-primary)',
+          }}
+        />
+        <button
+          onClick={handleSaveDate}
+          disabled={savingDate || !dateInput || dateInput === tsToLocalInput(match.date)}
+          className='text-xs px-2.5 py-1.5 rounded-lg font-semibold transition-opacity shrink-0'
+          style={{
+            background: 'var(--color-pitch)',
+            color: '#fff',
+            opacity: savingDate || !dateInput || dateInput === tsToLocalInput(match.date) ? 0.5 : 1,
+          }}
+        >
+          {savingDate ? '...' : 'Guardar hora'}
+        </button>
+        {match.adminTimeOverride && (
+          <button
+            onClick={handleClearDate}
+            disabled={savingDate}
+            className='text-xs px-2 py-1.5 rounded-lg font-medium transition-opacity shrink-0'
+            style={{
+              background: 'rgba(231,76,60,0.1)',
+              color: 'var(--color-accent-red)',
+              border: '1px solid var(--color-accent-red)',
+              opacity: savingDate ? 0.6 : 1,
+            }}
+          >
+            Quitar hora
+          </button>
+        )}
       </div>
 
       <div className='flex items-center gap-3 mb-3'>
