@@ -47,13 +47,22 @@ const STATUS_MAP = {
   SUSPENDED: 'live',
 };
 
-// Bracket slot IDs grouped by knockout stage, used for team advancement scoring
-const STAGE_BRACKET_SLOTS = {
-  roundOf32: BRACKET_R32.map((m) => m.id),
-  roundOf16: BRACKET_R16.map((m) => m.id),
-  quarterfinals: BRACKET_QF.map((m) => m.id),
-  semifinals: BRACKET_SF.map((m) => m.id),
-  final: ['final'],
+// The round a winner REACHES by winning a match in the given stage. (Winning the
+// final makes a champion — scored via tournamentOutcome, not team advancement.)
+const REACHED_ROUND = {
+  roundOf32: 'roundOf16',
+  roundOf16: 'quarterfinals',
+  quarterfinals: 'semifinals',
+  semifinals: 'final',
+};
+
+// For a reached round, the bracket slots whose resolved winners are exactly the teams
+// a user predicted to reach that round (e.g. winners of the R32 slots reached the R16).
+const REACHED_VIA_SLOTS = {
+  roundOf16: BRACKET_R32.map((m) => m.id),
+  quarterfinals: BRACKET_R16.map((m) => m.id),
+  semifinals: BRACKET_QF.map((m) => m.id),
+  final: BRACKET_SF.map((m) => m.id),
 };
 
 // ─── Status tracking ─────────────────────────────────────────────────────────
@@ -698,31 +707,40 @@ async function calculateBest3rdAdvancementIfReady() {
   await recalcUsers(affectedUserIds);
 }
 
-// Team advancement scoring — called when a knockout match finishes
+// Team advancement scoring — called when a knockout match finishes. The winner has now
+// REACHED the next round; award that round's points to everyone whose bracket also has
+// this team in that round. It's team-based and path-independent: the user just needs the
+// team that far in their resolved bracket — it doesn't matter via which matchup it got
+// there (e.g. group qualification → adv_roundOf32 is handled separately in the group pass).
 async function calculateAdvancementPoints(winnerTla, stage) {
-  const slots = STAGE_BRACKET_SLOTS[stage];
-  if (!slots || !winnerTla) return;
+  const round = REACHED_ROUND[stage];
+  if (!round || !winnerTla) return; // final winner = champion (scored in tournamentOutcome)
 
-  const advPoints = scoring.knockout.teamAdvancement[stage] || 0;
+  const advPoints = scoring.knockout.teamAdvancement[round] || 0;
   if (advPoints === 0) return;
+  const slots = REACHED_VIA_SLOTS[round];
 
-  const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'));
+  // Resolve every user's bracket so "did they have this team in `round`?" is decided by
+  // their predicted bracket (score-driven winners), not raw pick fields.
+  const resolvedUsers = await resolveAllUsersBrackets();
   const batch = writeBatch(db);
   const affectedUserIds = new Set();
 
-  bracketSnap.forEach((bracketDoc) => {
-    const data = bracketDoc.data();
-    const userId = data.userId;
-    if (!userId) return;
-
-    // Award points if user picked this winner in any slot of this stage
-    const predicted = slots.some((slot) => data[`pick_${slot}`] === winnerTla);
-    batch.update(bracketDoc.ref, { [`adv_${stage}_${winnerTla}`]: predicted ? advPoints : 0 });
+  for (const { userId, resolved } of resolvedUsers) {
+    const reached = new Set();
+    for (const slot of slots) {
+      const w = resolved[slot]?.winner;
+      if (w) reached.add(w);
+    }
+    batch.set(
+      doc(db, 'preTournamentBracket', userId),
+      { [`adv_${round}_${winnerTla}`]: reached.has(winnerTla) ? advPoints : 0 },
+      { merge: true },
+    );
     affectedUserIds.add(userId);
-  });
+  }
 
   await batch.commit();
-
   await recalcUsers(affectedUserIds);
 }
 
