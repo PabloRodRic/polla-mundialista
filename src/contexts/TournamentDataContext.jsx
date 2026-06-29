@@ -213,6 +213,7 @@ export function TournamentDataProvider({ children }) {
   return <TournamentDataContext.Provider value={value}>{children}</TournamentDataContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with its provider
 export function useTournamentData() {
   const ctx = useContext(TournamentDataContext);
   if (!ctx) throw new Error('useTournamentData must be used within a TournamentDataProvider');

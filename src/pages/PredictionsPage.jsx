@@ -152,7 +152,7 @@ function TeamSlot({ match, side }) {
   );
 }
 
-function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup }) {
+function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowStatus, matchNumber, isAdmin, bracketMatchup, bracketPred }) {
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
@@ -259,6 +259,16 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
         <TeamSlot match={match} side='B' />
       </div>
 
+      {/* Points earned by the live prediction (the big score above) once there's a result */}
+      {(finished || match.status === 'live') &&
+        match.scoreA !== null &&
+        prediction?.predictedScoreA != null &&
+        prediction?.predictedScoreB != null && (
+          <div className='flex justify-center mt-2'>
+            <PointsBadge points={prediction?.pointsEarned} />
+          </div>
+        )}
+
       {/* Penalty winner picker — required when scores are tied and match is still open.
           A draw isn't a complete prediction until a tiebreaker winner is chosen. */}
       {isTie && available && !locked && (
@@ -308,16 +318,20 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
         </p>
       )}
 
-      {/* Prediction + live/final score (the bracket "Pronóstico" lives in its own tab) */}
+      {/* Footer (finished/live): the big score above is already the user's live prediction,
+          so here we show their Pronóstico (bracket) prediction when they have this matchup,
+          plus the real result. No duplicate of the live score. */}
       {(finished || match.status === 'live') && match.scoreA !== null && (
         <div className='mt-3 pt-3 text-xs' style={{ borderTop: '1px solid var(--color-border)' }}>
-          <div className='flex items-center justify-center gap-2 mb-1'>
-            <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
-            <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-              {prediction?.predictedScoreA ?? '–'} – {prediction?.predictedScoreB ?? '–'}
-            </span>
-            <PointsBadge points={prediction?.pointsEarned} />
-          </div>
+          {bracketPred && (
+            <div className='flex items-center justify-center gap-2 mb-1'>
+              <span style={{ color: 'var(--color-gold)', opacity: 0.85 }}>Pronóstico:</span>
+              <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                {bracketPred.scoreA} – {bracketPred.scoreB}
+              </span>
+              <PointsBadge points={bracketPred.points} />
+            </div>
+          )}
           <div className='flex items-center justify-center gap-2'>
             <span style={{ color: 'var(--color-text-muted)' }}>
               {match.status === 'live' ? '🔴 En vivo:' : 'Resultado final:'}
@@ -370,6 +384,7 @@ export default function PredictionsPage() {
     matchesLoading: loading,
     livePreds: predictions,
     bracketMatchupIds,
+    bracketPredByMatchId,
     firstGroupMatchDate: tournamentStart,
     tournamentStarted,
   } = useTournamentData();
@@ -503,6 +518,7 @@ export default function PredictionsPage() {
       matchNumber={matchNumberById[m.id]}
       isAdmin={isAdmin}
       bracketMatchup={bracketMatchupIds.has(m.id)}
+      bracketPred={bracketPredByMatchId[m.id] ?? null}
     />
   );
 

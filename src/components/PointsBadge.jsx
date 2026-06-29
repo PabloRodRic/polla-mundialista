@@ -12,7 +12,7 @@ export default function PointsBadge({ points, className = '' }) {
       className={`font-semibold ${className}`}
       style={{ color: earned ? 'var(--color-gold)' : 'var(--color-text-muted)' }}
     >
-      {earned ? `+${points} pts` : '· sin puntos'}
+      {earned ? `+${points} pts` : 'sin puntos'}
     </span>
   );
 }

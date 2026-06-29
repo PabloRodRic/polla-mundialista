@@ -33,6 +33,18 @@ const STAGE_LABELS = {
   final: 'Final',
 };
 
+// Finished-match sections in display order. Module-level so it's a stable reference
+// (keeps the useMemos below honest and lets the React Compiler optimize them).
+const STAGE_SECTIONS = [
+  { key: 'group',         label: 'Partidos en Grupos' },
+  { key: 'roundOf32',     label: '16vos de Final' },
+  { key: 'roundOf16',     label: '8vos de Final' },
+  { key: 'quarterfinals', label: 'Cuartos de Final' },
+  { key: 'semifinals',    label: 'Semifinales' },
+  { key: 'thirdPlace',    label: 'Tercer Puesto' },
+  { key: 'final',         label: 'Final' },
+];
+
 function flagSrc(match, side) {
   const flag = side === 'A' ? match.flagA : match.flagB;
   const crest = side === 'A' ? match.crestA : match.crestB;
@@ -385,9 +397,12 @@ export default function LeaderboardPage() {
     if (!myBracket) return null;
     const groups = {};
     const adv = { roundOf32: 0, roundOf16: 0, quarterfinals: 0, semifinals: 0, final: 0 };
+    let ksp = 0; // points from correct knockout bracket score predictions ("Acierto")
     for (const [key, val] of Object.entries(myBracket)) {
       if (key.startsWith('gsp_') && key.length === 5) {
         groups[key[4]] = (groups[key[4]] || 0) + (val || 0);
+      } else if (key.startsWith('ksp_')) {
+        ksp += val || 0;
       }
       for (const stage of Object.keys(adv)) {
         if (key.startsWith(`adv_${stage}_`)) adv[stage] += val || 0;
@@ -396,7 +411,7 @@ export default function LeaderboardPage() {
     const scoredGroups = Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
     const totalGsp = scoredGroups.reduce((s, [, pts]) => s + pts, 0);
     const totalAdv = Object.values(adv).reduce((s, v) => s + v, 0);
-    return { scoredGroups, totalGsp, adv, totalAdv };
+    return { scoredGroups, totalGsp, adv, totalAdv, ksp };
   }, [myBracket]);
 
   const loading = playersLoading;
@@ -409,16 +424,6 @@ export default function LeaderboardPage() {
 
 
   // Group finished matches by stage section, in display order
-  const STAGE_SECTIONS = [
-    { key: 'group',         label: 'Partidos en Grupos' },
-    { key: 'roundOf32',     label: '16vos de Final' },
-    { key: 'roundOf16',     label: '8vos de Final' },
-    { key: 'quarterfinals', label: 'Cuartos de Final' },
-    { key: 'semifinals',    label: 'Semifinales' },
-    { key: 'thirdPlace',    label: 'Tercer Puesto' },
-    { key: 'final',         label: 'Final' },
-  ];
-
   const matchesByStage = useMemo(() => {
     const map = {};
     for (const { key } of STAGE_SECTIONS) map[key] = [];
@@ -447,6 +452,7 @@ export default function LeaderboardPage() {
 
   // When a new round becomes active, open it and collapse all earlier rounds
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot resync when the active round changes
     setOpenSections(prev => {
       const next = { ...prev };
       for (const { key } of STAGE_SECTIONS) {
@@ -731,12 +737,22 @@ export default function LeaderboardPage() {
                 ) : null
               )}
 
+              {/* Knockout bracket score predictions — the "Acierto" matchup-score points */}
+              {bonusPoints.ksp > 0 && (
+                <div className='flex items-center justify-between pt-2' style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>Pronósticos de llave acertados</span>
+                  <span className='text-sm font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
+                    {bonusPoints.ksp}
+                  </span>
+                </div>
+              )}
+
               {/* Grand total */}
               <div className='flex items-center justify-between pt-2 mt-1' style={{ borderTop: '1px solid var(--color-border)' }}>
                 <span className='text-sm font-semibold' style={{ color: 'var(--color-gold)' }}>Total adicionales</span>
                 <div className='flex flex-col items-end leading-none'>
                   <span className='text-lg font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
-                    {bonusPoints.totalGsp + bonusPoints.totalAdv}
+                    {bonusPoints.totalGsp + bonusPoints.totalAdv + bonusPoints.ksp}
                   </span>
                   <span className='text-[10px] mt-0.5' style={{ color: 'var(--color-text-muted)' }}>pts</span>
                 </div>
