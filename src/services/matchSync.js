@@ -165,6 +165,25 @@ function resultTier(predA, predB, realA, realB) {
 }
 
 
+// True when the fields we'd write match what's already stored, so the sync can skip the
+// write entirely. Ignores lastSyncedAt (a bookkeeping timestamp). `date` is a Firestore
+// Timestamp, compared by seconds. This stops every sync from re-writing all ~100 matches
+// when only a couple actually changed.
+function isSameAsStored(prev, toWrite) {
+  if (!prev) return false;
+  for (const [k, v] of Object.entries(toWrite)) {
+    if (k === 'lastSyncedAt') continue;
+    if (k === 'date') {
+      const a = v?.seconds ?? v?._seconds ?? null;
+      const b = prev[k]?.seconds ?? prev[k]?._seconds ?? null;
+      if (a !== b) return false;
+      continue;
+    }
+    if (prev[k] !== v) return false;
+  }
+  return true;
+}
+
 // ─── Core sync ───────────────────────────────────────────────────────────────
 
 export async function syncMatchesFromAPI() {
@@ -184,6 +203,7 @@ export async function syncMatchesFromAPI() {
     const newlyFinished = [];
     const currentlyLive = [];
     const batch = writeBatch(db);
+    let writeCount = 0;
 
     for (const apiMatch of apiMatches) {
       const normalized = normalizeMatch(apiMatch);
@@ -199,11 +219,18 @@ export async function syncMatchesFromAPI() {
         newlyFinished.push({ docId, ...normalized });
       }
 
+      // Re-score a live match only when it first goes live or its score/winner actually
+      // moved — not on every sync. The live recompute is heavy (resolves everyone's
+      // bracket), so re-running it for an unchanged scoreline is pure waste.
       if (
         normalized.status === 'live' &&
         normalized.scoreA !== null &&
         normalized.scoreB !== null &&
-        !prev?.adminOverride
+        !prev?.adminOverride &&
+        (prev?.status !== 'live' ||
+          prev?.scoreA !== normalized.scoreA ||
+          prev?.scoreB !== normalized.scoreB ||
+          prev?.winner !== normalized.winner)
       ) {
         currentlyLive.push({ docId, ...normalized });
       }
@@ -231,10 +258,15 @@ export async function syncMatchesFromAPI() {
       if (!toWrite.crestA && prev?.crestA) delete toWrite.crestA;
       if (!toWrite.crestB && prev?.crestB) delete toWrite.crestB;
 
-      batch.set(matchRef, toWrite, { merge: true });
+      // Only write matches that actually changed — skip the unchanged (mostly finished)
+      // ones so a routine sync doesn't burn ~100 writes for no reason.
+      if (!isSameAsStored(prev, toWrite)) {
+        batch.set(matchRef, toWrite, { merge: true });
+        writeCount++;
+      }
     }
 
-    await batch.commit();
+    if (writeCount > 0) await batch.commit();
 
     syncStatus = {
       syncing: false,
