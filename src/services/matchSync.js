@@ -338,16 +338,14 @@ export function stopAutoSync() {
 
 // isPreTournament=true uses scaled per-round scoring from preTournamentMatchResult.
 //
-// advancer (live knockout predictions only): { predicted, real } TLAs — the team each
-// side names as the winner (the scoreline's winner, or the tiebreaker pick when level).
-// Two knockout-only adjustments:
-//   • Real match was a draw and the user also predicted a draw → a wrong advancer demotes
-//     the prediction one tier (exact → goal-diff → outcome).
-//   • User predicted a draw but the real match was decisive → if their pick is the team
-//     that actually won, the prediction earns the correct-outcome tier (right winner,
-//     wrong scoreline) instead of zero.
-// Omit `advancer` (group stage, the Pronóstico bracket — where advancement is scored
-// separately) to skip both entirely; groups can legitimately end level.
+// advancer (knockout predictions): { predicted, real } TLAs — the team each side names as
+// the winner (the higher-scored side, or the tiebreaker pick when level). Two knockout-only
+// adjustments, both keyed on who advances:
+//   • Real draw + predicted draw → a wrong advancer demotes one tier (exact→goal-diff→outcome).
+//   • Scoreline outcome missed (tier 0) but the predicted advancer matches the real one →
+//     credit the correct-outcome tier. This covers predicted-draw/real-decisive AND
+//     predicted-decisive/real-draw-on-penalties.
+// Omit `advancer` (group stage) to skip both entirely; groups can legitimately end level.
 export function computeMatchPoints(predicted, real, stage, isPreTournament = false, advancer = null) {
   const pA = Number(predicted.scoreA);
   const pB = Number(predicted.scoreB);
@@ -383,12 +381,13 @@ export function computeMatchPoints(predicted, real, stage, isPreTournament = fal
     if (advancer.predicted !== advancer.real) tier -= 1;
   }
 
-  // Knockouts have no draws: a user who predicts a level score still names a winner via
-  // the tiebreaker pick. If the real match was decided (one side won in normal/extra time)
-  // and that pick is the team that actually won, the prediction has the right winner with
-  // the wrong scoreline → credit the correct outcome. (Score/goal-diff tiers stay 0 here,
-  // since a level prediction can't match a decisive scoreline.)
-  if (advancer && advancer.real && tier === 0 && pResult === 0 && advancer.predicted === advancer.real) {
+  // Knockouts are decided by who advances, so naming the right team matters even when the
+  // scoreline outcome missed. If the tier is 0 but the user named the team that actually
+  // advanced — the tiebreaker pick on a predicted draw, or the higher-scored side on a
+  // decisive prediction — credit the correct outcome. Covers both mirror cases:
+  //   • predicted a draw, real match was decisive; and
+  //   • predicted a decisive winner, real match was a draw won on penalties.
+  if (advancer && advancer.real && advancer.predicted && tier === 0 && advancer.predicted === advancer.real) {
     tier = 1;
   }
 
@@ -420,6 +419,7 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
   //   appear as home/away. Used to look up ks_{slotId}_A/B and score the pre-tournament prediction.
   const matchupHitByUser = new Set();
   const bracketSlotByUser = {}; // userId → slotId (e.g. 'r32_04') for Pronóstico scoring
+  const bracketFlipByUser = {}; // userId → true when the slot's home is the real match's AWAY team
 
   if (tlaA && tlaB && stage !== 'group') {
     const resolvedUsers = await resolveAllUsersBrackets();
@@ -455,15 +455,22 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
           const h = resolved[def.id]?.home?.tla, a = resolved[def.id]?.away?.tla;
           if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) {
             bracketSlotByUser[userId] = def.id;
+            bracketFlipByUser[userId] = h === tlaB;
             break;
           }
         }
       } else if (stage === 'final') {
         const h = resolved['final']?.home?.tla, a = resolved['final']?.away?.tla;
-        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) bracketSlotByUser[userId] = 'final';
+        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) {
+          bracketSlotByUser[userId] = 'final';
+          bracketFlipByUser[userId] = h === tlaB;
+        }
       } else if (stage === 'thirdPlace') {
         const h = resolved['3rd']?.home?.tla, a = resolved['3rd']?.away?.tla;
-        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) bracketSlotByUser[userId] = '3rd';
+        if (h && a && ((h === tlaA && a === tlaB) || (h === tlaB && a === tlaA))) {
+          bracketSlotByUser[userId] = '3rd';
+          bracketFlipByUser[userId] = h === tlaB;
+        }
       }
     }
   }
@@ -517,13 +524,15 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
     const userId = data.userId || bracketDoc.id;
     const slotId = bracketSlotByUser[userId];
     if (!slotId) return;
-    const predA = data[`ks_${slotId}_A`];
-    const predB = data[`ks_${slotId}_B`];
-    if (predA === null || predA === undefined || predB === null || predB === undefined) return;
-    // Same knockout tiebreaker rule as live predictions: a level bracket score still names
-    // a winner via the slot's pick. Pass it as the advancer so a draw whose pick actually
-    // won earns the correct outcome (and a wrong pick on a real draw is demoted).
-    const predictedAdvancer = predA === predB ? (data[`pick_${slotId}`] ?? null) : null;
+    const rawA = data[`ks_${slotId}_A`];
+    const rawB = data[`ks_${slotId}_B`];
+    if (rawA === null || rawA === undefined || rawB === null || rawB === undefined) return;
+    // Align the slot's home/away to the real match's home/away (the slot can be flipped),
+    // so the score comparison and advancer are computed against the right teams.
+    const predA = bracketFlipByUser[userId] ? rawB : rawA;
+    const predB = bracketFlipByUser[userId] ? rawA : rawB;
+    // Who this bracket predicts to advance: the higher-scored side, or the slot's pick on a draw.
+    const predictedAdvancer = predA > predB ? tlaA : predB > predA ? tlaB : (data[`pick_${slotId}`] ?? null);
     const points = computeMatchPoints(
       { scoreA: predA, scoreB: predB },
       { scoreA, scoreB },

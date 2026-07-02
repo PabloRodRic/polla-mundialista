@@ -7,9 +7,11 @@ metadata:
 
 Knockout matches always have a winner, so a level score prediction (e.g. 2-2) is really "this team advances" via the user's `predictedPenaltyWinner`. Scoring must honor that — do NOT apply group-stage 1X2 logic where a draw prediction vs a decisive result is just a wrong outcome.
 
-`computeMatchPoints` in [matchSync.js](src/services/matchSync.js) takes an `advancer { predicted, real }`. It must be passed for **both** scoring paths in `_writePredictionPoints`: the live `predictions` (advancer = `predictedPenaltyWinner`) AND the bracket/Pronóstico `ks_` scores (advancer = the slot's `pick_`). Both were missing it at different times. It does two things:
+`computeMatchPoints` in [matchSync.js](src/services/matchSync.js) takes an `advancer { predicted, real }`. It must be passed for **both** scoring paths in `_writePredictionPoints`: the live `predictions` (advancer = `predictedPenaltyWinner`) AND the bracket/Pronóstico `ks_` scores (advancer = the slot's `pick_`). Both were missing it at different times. It does two things, both keyed on **who advances**:
 - **Real draw + predicted draw:** wrong pick demotes one tier (exact→GD→outcome).
-- **Real decisive + predicted draw:** if the pick == the team that actually won, award the **correct-outcome** tier (right winner, wrong scoreline) instead of 0. (Score/GD tiers can't apply — a level prediction can't match a decisive scoreline.)
+- **Scoreline outcome missed (tier 0) but predicted advancer == real advancer → correct-outcome tier.** This is symmetric and MUST cover both mirror cases: predicted-draw/real-decisive AND predicted-decisive/real-draw-on-penalties. (First shipped only the first case — Pablo Papá predicted 1-2 MAR, real 1-1 MAR-pens, got 0 instead of 1. Fixed 2026-07-02 by dropping the `pResult===0` guard.)
+
+The `advancer` must be passed for BOTH scoring paths in `_writePredictionPoints`. Live preds: advancer = higher-scored side or `predictedPenaltyWinner`. Bracket (ksp) preds: the ks_ slot can be **flipped** vs the real match's home/away, so align `ks_A/ks_B` to the real home/away first (via `bracketFlipByUser`, set when the slot is matched), then advancer = higher-scored side or the slot's `pick_`. Not aligning mis-scored both the tiers and the advancer.
 
 A draw with no `predictedPenaltyWinner` is an **incomplete** prediction (the Llaves UI now requires a winner; `isPredictionComplete` counts it as pending) and scores 0.
 
