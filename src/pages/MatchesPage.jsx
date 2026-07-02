@@ -8,6 +8,10 @@ import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
 import PointsBadge from '../components/PointsBadge';
+import PredictionScore from '../components/PredictionScore';
+
+// Bright green ring on the flag of a knockout team that won on penalties.
+const WIN_RING = { boxShadow: '0 0 0 2px #22e06b' };
 
 // Live (knockout) predictions lock one hour before that specific match's kickoff.
 // Mirrors PredictionsPage so the two screens agree on when bets become visible.
@@ -69,20 +73,20 @@ function StatusBadge({ status }) {
   );
 }
 
-function TeamFlag({ match, side }) {
+function TeamFlag({ match, side, won }) {
   const src = flagSrc(match, side);
   const name = side === 'A' ? match.teamA : match.teamB;
   if (!src) {
     return (
       <div
         className='w-8 h-6 rounded text-xs flex items-center justify-center font-bold'
-        style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}
+        style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)', ...(won ? WIN_RING : null) }}
       >
         {(side === 'A' ? match.tlaA : match.tlaB) || '?'}
       </div>
     );
   }
-  return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />;
+  return <img src={src} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' style={won ? WIN_RING : undefined} />;
 }
 
 function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin, prediction, bracketMatchup, bracketPred }) {
@@ -90,6 +94,11 @@ function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin
   const pB = prediction?.predictedScoreB;
   const hasPrediction = pA != null && pB != null;
   const scored = match.status === 'finished' || match.status === 'live';
+  // Knockout decided on penalties (level score + a stored tiebreaker winner) → mark the winner.
+  const penSide =
+    scored && match.stage !== 'group' && match.scoreA != null && match.scoreA === match.scoreB && (match.winner === 'home' || match.winner === 'away')
+      ? match.winner
+      : null;
 
   // When are this match's bets locked (and therefore safe to reveal to everyone)?
   //   group    → all group bets lock together when the tournament kicks off.
@@ -137,7 +146,7 @@ function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin
       <div className='flex items-center justify-between gap-2'>
         {/* Team A */}
         <div className='flex-1 flex flex-col items-center gap-1'>
-          <TeamFlag match={match} side='A' />
+          <TeamFlag match={match} side='A' won={penSide === 'home'} />
           <span className='text-xs text-center font-medium' style={{ color: 'var(--color-text-primary)' }}>
             {tlaLabel(match.tlaA) || match.teamA}
           </span>
@@ -170,7 +179,7 @@ function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin
 
         {/* Team B */}
         <div className='flex-1 flex flex-col items-center gap-1'>
-          <TeamFlag match={match} side='B' />
+          <TeamFlag match={match} side='B' won={penSide === 'away'} />
           <span className='text-xs text-center font-medium' style={{ color: 'var(--color-text-primary)' }}>
             {tlaLabel(match.tlaB) || match.teamB}
           </span>
@@ -194,18 +203,14 @@ function MatchCard({ match, onShowBets, onShowStatus, tournamentStarted, isAdmin
             {hasPrediction && (
               <div className='flex items-center gap-1.5'>
                 <span style={{ color: 'var(--color-text-muted)' }}>Predicciones:</span>
-                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                  {pA} – {pB}
-                </span>
+                <PredictionScore scoreA={pA} scoreB={pB} tlaA={match.tlaA} tlaB={match.tlaB} pick={prediction?.predictedPenaltyWinner} />
                 {scored && <PointsBadge points={prediction.pointsEarned} />}
               </div>
             )}
             {bracketPred && (
               <div className='flex items-center gap-1.5'>
                 <span style={{ color: 'var(--color-gold)', opacity: 0.8 }}>Pronóstico:</span>
-                <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                  {bracketPred.scoreA} – {bracketPred.scoreB}
-                </span>
+                <PredictionScore scoreA={bracketPred.scoreA} scoreB={bracketPred.scoreB} tlaA={match.tlaA} tlaB={match.tlaB} pick={bracketPred.pick} />
                 {scored && <PointsBadge points={bracketPred.points} />}
               </div>
             )}

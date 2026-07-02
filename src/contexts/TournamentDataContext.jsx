@@ -178,7 +178,7 @@ export function TournamentDataProvider({ children }) {
       const scoreA = myBracket[`ks_${slotId}_A`];
       const scoreB = myBracket[`ks_${slotId}_B`];
       if (scoreA == null || scoreB == null) continue;
-      bracketPredByMatchId[m.id] = { scoreA, scoreB, points: myBracket[`ksp_${slotId}`] ?? null };
+      bracketPredByMatchId[m.id] = { scoreA, scoreB, points: myBracket[`ksp_${slotId}`] ?? null, pick: myBracket[`pick_${slotId}`] ?? null };
     }
 
     return { bracketMatchupIds, bracketMatchupSlotIds, bracketPredByMatchId };

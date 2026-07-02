@@ -129,13 +129,14 @@ export async function fetchOthersLiveBets(match) {
         byUser[userId] = {
           bracketScoreA: sameOrient ? s.scoreA : s.scoreB,
           bracketScoreB: sameOrient ? s.scoreB : s.scoreA,
+          bracketPick: s.winner ?? null, // who their bracket has advancing (tiebreaker pick on a draw)
         }
         break
       }
     }
     for (const b of bets) {
       const bk = byUser[b.userId]
-      if (bk) { b.bracketScoreA = bk.bracketScoreA; b.bracketScoreB = bk.bracketScoreB }
+      if (bk) { b.bracketScoreA = bk.bracketScoreA; b.bracketScoreB = bk.bracketScoreB; b.bracketPick = bk.bracketPick }
     }
   }
 

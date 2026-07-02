@@ -144,7 +144,9 @@ export default function OthersBetsModal({
                             style={{ color: 'var(--color-gold)' }}
                             title='También lo tiene en su pronóstico de llave'
                           >
-                            ★ {b.bracketScoreA}–{b.bracketScoreB}
+                            ★ {b.bracketScoreA}
+                            {b.bracketScoreA === b.bracketScoreB && b.bracketPick === homeTla && '*'}–{b.bracketScoreB}
+                            {b.bracketScoreA === b.bracketScoreB && b.bracketPick === awayTla && '*'}
                           </span>
                         )}
                       </span>

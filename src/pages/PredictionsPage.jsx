@@ -9,6 +9,10 @@ import OthersBetsModal from '../components/OthersBetsModal';
 import PredictionStatusModal from '../components/PredictionStatusModal';
 import BetsIconButton from '../components/BetsIconButton';
 import PointsBadge from '../components/PointsBadge';
+import PredictionScore from '../components/PredictionScore';
+
+// Bright green ring on the flag of a knockout team that won on penalties.
+const WIN_RING = { boxShadow: '0 0 0 2px #22e06b' };
 
 const KNOCKOUT_STAGES = ['roundOf32', 'roundOf16', 'quarterfinals', 'semifinals', 'thirdPlace', 'final'];
 
@@ -106,7 +110,7 @@ function ScoreInput({ value, onChange, disabled }) {
   );
 }
 
-function TeamSlot({ match, side }) {
+function TeamSlot({ match, side, won }) {
   const flag = side === 'A' ? match.flagA : match.flagB;
   const tla = side === 'A' ? match.tlaA : match.tlaB;
   const name = side === 'A' ? match.teamA : match.teamB;
@@ -129,7 +133,7 @@ function TeamSlot({ match, side }) {
           ⚽
         </div>
       ) : imgSrc ? (
-        <img src={imgSrc} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' />
+        <img src={imgSrc} alt={name} loading='lazy' className='w-8 h-6 object-cover rounded shadow' style={won ? WIN_RING : undefined} />
       ) : (
         <div
           className='w-8 h-6 rounded flex items-center justify-center text-xs font-bold'
@@ -137,6 +141,7 @@ function TeamSlot({ match, side }) {
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
             color: 'var(--color-text-muted)',
+            ...(won ? WIN_RING : null),
           }}
         >
           {tlaLabel(tla)?.slice(0, 3) || '?'}
@@ -156,6 +161,11 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
   const locked = isLiveLocked(match);
   const available = isLiveAvailable(match);
   const finished = match.status === 'finished';
+  // Real penalty-shootout winner (level score + stored tiebreaker winner) → green flag ring.
+  const penSide =
+    (finished || match.status === 'live') && match.scoreA != null && match.scoreA === match.scoreB && (match.winner === 'home' || match.winner === 'away')
+      ? match.winner
+      : null;
 
   const [scoreA, setScoreA] = useState(prediction?.predictedScoreA ?? null);
   const [scoreB, setScoreB] = useState(prediction?.predictedScoreB ?? null);
@@ -248,7 +258,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
 
       {/* Teams + inputs */}
       <div className='flex items-center gap-3'>
-        <TeamSlot match={match} side='A' />
+        <TeamSlot match={match} side='A' won={penSide === 'home'} />
 
         <div className='flex items-center gap-2'>
           <ScoreInput value={scoreA} onChange={(v) => handleChange('A', v)} disabled={locked || !available} />
@@ -256,7 +266,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
           <ScoreInput value={scoreB} onChange={(v) => handleChange('B', v)} disabled={locked || !available} />
         </div>
 
-        <TeamSlot match={match} side='B' />
+        <TeamSlot match={match} side='B' won={penSide === 'away'} />
       </div>
 
       {/* Points earned by the live prediction (the big score above) once there's a result */}
@@ -326,9 +336,7 @@ function PredictionCard({ match, prediction, onSave, saving, onShowBets, onShowS
           {bracketPred && (
             <div className='flex items-center justify-center gap-2 mb-1'>
               <span style={{ color: 'var(--color-gold)', opacity: 0.85 }}>Pronóstico:</span>
-              <span className='font-bold' style={{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-display)' }}>
-                {bracketPred.scoreA} – {bracketPred.scoreB}
-              </span>
+              <PredictionScore scoreA={bracketPred.scoreA} scoreB={bracketPred.scoreB} tlaA={match.tlaA} tlaB={match.tlaB} pick={bracketPred.pick} />
               <PointsBadge points={bracketPred.points} />
             </div>
           )}
