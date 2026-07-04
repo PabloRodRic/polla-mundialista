@@ -358,9 +358,9 @@ export function computeMatchPoints(predicted, real, stage, isPreTournament = fal
   if (stage === 'group') {
     cfg = scoring.groupStage.matchResult;
   } else if (isPreTournament) {
-    cfg = scoring.knockout.preTournamentMatchResult[stage] || scoring.knockout.liveMatchResult;
+    cfg = scoring.knockout.preTournamentMatchResult[stage] || scoring.knockout.liveMatchResult.roundOf32;
   } else {
-    cfg = scoring.knockout.liveMatchResult;
+    cfg = scoring.knockout.liveMatchResult[stage] || scoring.knockout.liveMatchResult.roundOf32;
   }
 
   const pResult = Math.sign(pA - pB);

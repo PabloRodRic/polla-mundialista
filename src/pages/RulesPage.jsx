@@ -186,9 +186,21 @@ export default function RulesPage() {
             🔒 Cierra: <strong>cuando empieza el partido</strong>
           </p>
         </div>
-        <TierTable config={knockout.liveMatchResult} />
+        {[
+          ['Ronda de 32', knockout.liveMatchResult.roundOf32],
+          ['Octavos de Final', knockout.liveMatchResult.roundOf16],
+          ['Cuartos de Final', knockout.liveMatchResult.quarterfinals],
+          ['Semifinales', knockout.liveMatchResult.semifinals],
+          ['Tercer Puesto', knockout.liveMatchResult.thirdPlace],
+          ['Final', knockout.liveMatchResult.final],
+        ].map(([label, cfg]) => (
+          <div key={label} className='mb-4'>
+            <TierTable config={cfg} title={label} />
+          </div>
+        ))}
         <p className='text-xs mt-2 mb-3' style={{ color: 'var(--color-text-muted)' }}>
-          Puntaje fijo en todas las rondas. Se acumula con las predicciones pre-torneo.
+          El puntaje sube por ronda. Siempre es menor o igual a la predicción pre-torneo, así que
+          acertar desde antes vale más. Se acumula con las predicciones pre-torneo.
         </p>
 
         {/* Tie / penalties rule — advancer demotion */}
@@ -210,20 +222,23 @@ export default function RulesPage() {
           </p>
           <ul className='mt-2 space-y-1 list-disc list-inside'>
             <li>
-              Marcador de empate exacto + quién avanza ✓ → <strong>{knockout.liveMatchResult.exactScore} pts</strong> (exacto)
+              Marcador de empate exacto + quién avanza ✓ → <strong>{knockout.liveMatchResult.roundOf32.exactScore} pts</strong> (exacto)
             </li>
             <li>
               Marcador de empate exacto pero quién avanza ✗ →{' '}
-              <strong>{knockout.liveMatchResult.correctOutcomeAndGoalDifference} pts</strong> (baja a diferencia de gol)
+              <strong>{knockout.liveMatchResult.roundOf32.correctOutcomeAndGoalDifference} pts</strong> (baja a diferencia de gol)
             </li>
             <li>
               Empate no exacto + quién avanza ✓ →{' '}
-              <strong>{knockout.liveMatchResult.correctOutcomeAndGoalDifference} pts</strong> (diferencia de gol)
+              <strong>{knockout.liveMatchResult.roundOf32.correctOutcomeAndGoalDifference} pts</strong> (diferencia de gol)
             </li>
             <li>
-              Empate no exacto + quién avanza ✗ → <strong>{knockout.liveMatchResult.correctOutcome} pt</strong> (resultado correcto)
+              Empate no exacto + quién avanza ✗ → <strong>{knockout.liveMatchResult.roundOf32.correctOutcome} pt</strong> (resultado correcto)
             </li>
           </ul>
+          <p className='mt-2' style={{ color: 'var(--color-text-muted)' }}>
+            Ejemplo con puntajes de Ronda de 32; los puntos suben por ronda.
+          </p>
           <p className='mt-2' style={{ color: 'var(--color-text-muted)' }}>
             Aplica solo a las predicciones en vivo. En el bracket pre-torneo, acertar quién avanza ya se premia aparte
             (Clasificación de Equipos).

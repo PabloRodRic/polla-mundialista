@@ -23,19 +23,23 @@
       "semifinals": 8,
       "final": 12
     },
+    "_note_preTournament": "Pre-tournament bracket scoring. Kept exactly 1 pt above liveMatchResult in every tier from R16 up, so calling a match before the tournament is worth more. R32 stays 1/2/3 (equal to live) because it was already played — bumping it would require re-scoring finished matches.",
     "preTournamentMatchResult": {
       "roundOf32":      { "correctOutcome": 1, "correctOutcomeAndGoalDifference": 2, "exactScore": 3 },
-      "roundOf16":      { "correctOutcome": 2, "correctOutcomeAndGoalDifference": 3, "exactScore": 5 },
-      "quarterfinals":  { "correctOutcome": 3, "correctOutcomeAndGoalDifference": 4, "exactScore": 6 },
-      "semifinals":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 7 },
-      "thirdPlace":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 7 },
-      "final":          { "correctOutcome": 5, "correctOutcomeAndGoalDifference": 6, "exactScore": 8 }
+      "roundOf16":      { "correctOutcome": 3, "correctOutcomeAndGoalDifference": 4, "exactScore": 5 },
+      "quarterfinals":  { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 6 },
+      "semifinals":     { "correctOutcome": 5, "correctOutcomeAndGoalDifference": 6, "exactScore": 7 },
+      "thirdPlace":     { "correctOutcome": 5, "correctOutcomeAndGoalDifference": 6, "exactScore": 7 },
+      "final":          { "correctOutcome": 6, "correctOutcomeAndGoalDifference": 7, "exactScore": 8 }
     },
     "liveMatchResult": {
-      "_note": "Flat scoring — same for every knockout round",
-      "correctOutcome": 1,
-      "correctOutcomeAndGoalDifference": 2,
-      "exactScore": 3
+      "_note": "Escalates by round: R32 stays 1/2/3, then +1 per tier each round from R16. Always kept at or below the pre-tournament (bracket) table so calling a match early is worth more.",
+      "roundOf32":      { "correctOutcome": 1, "correctOutcomeAndGoalDifference": 2, "exactScore": 3 },
+      "roundOf16":      { "correctOutcome": 2, "correctOutcomeAndGoalDifference": 3, "exactScore": 4 },
+      "quarterfinals":  { "correctOutcome": 3, "correctOutcomeAndGoalDifference": 4, "exactScore": 5 },
+      "semifinals":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 6 },
+      "thirdPlace":     { "correctOutcome": 4, "correctOutcomeAndGoalDifference": 5, "exactScore": 6 },
+      "final":          { "correctOutcome": 5, "correctOutcomeAndGoalDifference": 6, "exactScore": 7 }
     }
   },
 
