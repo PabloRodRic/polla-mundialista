@@ -52,11 +52,11 @@ function isLiveAvailable(match) {
   return !!(match.tlaA || match.teamA) && !!(match.tlaB || match.teamB);
 }
 
-// Locks 1 hour before kickoff
+// Locks at kickoff — predictions stay open until the game actually starts
 function isLiveLocked(match) {
   if (!match.date?.toDate) return false;
   const kickoff = match.date.toDate();
-  return new Date() >= new Date(kickoff.getTime() - 1 * 60 * 60 * 1000);
+  return new Date() >= kickoff;
 }
 
 // A live prediction only counts as "done" when both scores are set and — for a draw —
@@ -571,7 +571,7 @@ export default function PredictionsPage() {
             Disponible cuando arranque el Mundial
           </h2>
           <p className='text-sm leading-relaxed mb-3' style={{ color: 'var(--color-text-secondary)' }}>
-            Acá vas a marcar el resultado de cada partido de eliminatoria en vivo, hasta una hora antes de que empiece.
+            Acá vas a marcar el resultado de cada partido de eliminatoria en vivo, hasta que empiece.
           </p>
           <p className='text-sm leading-relaxed' style={{ color: 'var(--color-text-secondary)' }}>
             Por ahora, completa <strong>todos</strong> tus pronósticos de grupos, llaves y premios en el tab de{' '}
@@ -587,7 +587,7 @@ export default function PredictionsPage() {
         <>
           {/* Instruction */}
           <p className='text-sm mt-1 mb-4' style={{ color: 'var(--color-text-muted)' }}>
-            Marcá tus pronósticos en cada partido hasta una hora antes del inicio del mismo.
+            Marcá tus pronósticos en cada partido hasta que empiece.
           </p>
 
           {/* Stage selector — two rows of 3 on phone, single row of 6 on desktop */}

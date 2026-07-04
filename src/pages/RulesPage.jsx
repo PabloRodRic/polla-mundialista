@@ -49,7 +49,7 @@ function TierTable({ config, title }) {
 }
 
 export default function RulesPage() {
-  const { groupStage, knockout, tournamentOutcome, individualAwards, liveMatchTiming } = scoring;
+  const { groupStage, knockout, tournamentOutcome, individualAwards } = scoring;
 
   return (
     <div className='max-w-lg mx-auto px-4 pt-4 pb-8'>
@@ -183,7 +183,7 @@ export default function RulesPage() {
         >
           <p>⏰ Abre: cuando los equipos del partido estén definidos</p>
           <p className='mt-1'>
-            🔒 Cierra: <strong>{liveMatchTiming.locksBeforeKickoffHours}h</strong> antes del partido
+            🔒 Cierra: <strong>cuando empieza el partido</strong>
           </p>
         </div>
         <TierTable config={knockout.liveMatchResult} />
@@ -253,7 +253,7 @@ export default function RulesPage() {
         </p>
         <p className='text-sm mt-2' style={{ color: 'var(--color-text-secondary)' }}>
           Las predicciones en vivo de eliminatorias se habilitan cuando los dos equipos del partido están definidos y se
-          cierran <strong>{liveMatchTiming.locksBeforeKickoffHours} hora</strong> antes del inicio del partido.
+          cierran <strong>cuando empieza el partido</strong>.
         </p>
       </Section>
     </div>
