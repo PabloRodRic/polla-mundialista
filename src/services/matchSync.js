@@ -476,7 +476,9 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
   }
 
   // 1. Live knockout predictions (PredictionsPage → 'predictions' collection)
-  //    Apply pre-tournament scoring rates when the user's bracket has the matchup hit.
+  //    Always scored at live rates. A bracket "matchup hit" is only an indicator that the same
+  //    tie was also in the user's pre-tournament bracket (scored separately, at higher rates) —
+  //    it must NOT promote the live prediction's points.
   const predsSnap = await getDocs(query(collection(db, 'predictions'), where('matchId', '==', String(matchId))));
   predsSnap.forEach((predDoc) => {
     const pred = predDoc.data();
@@ -489,7 +491,7 @@ async function _writePredictionPoints(matchId, scoreA, scoreB, stage, tlaA, tlaB
       { scoreA: pred.predictedScoreA, scoreB: pred.predictedScoreB },
       { scoreA, scoreB },
       stage,
-      matchupHit,
+      false,
       { predicted: predictedAdvancer, real: realAdvancer },
     );
     const isExact = isExactScore(pred.predictedScoreA, pred.predictedScoreB, scoreA, scoreB);
