@@ -13,12 +13,13 @@ import PredictionScore from '../components/PredictionScore';
 // Bright green ring on the flag of a knockout team that won on penalties.
 const WIN_RING = { boxShadow: '0 0 0 2px #22e06b' };
 
-// Live (knockout) predictions lock one hour before that specific match's kickoff.
-// Mirrors PredictionsPage so the two screens agree on when bets become visible.
+// Live (knockout) predictions lock at that specific match's kickoff.
+// Mirrors PredictionsPage so the two screens agree on when a pick locks — and, since this
+// same gate reveals everyone's bets, so that others' picks only become visible once locked.
 function isLiveLocked(match) {
   if (!match.date?.toDate) return false;
   const kickoff = match.date.toDate();
-  return new Date() >= new Date(kickoff.getTime() - 1 * 60 * 60 * 1000);
+  return new Date() >= kickoff;
 }
 
 const STAGE_LABELS = {
