@@ -49,12 +49,12 @@ export default function PredictionStatusModal({ open, onClose, title, rows, load
 
   return (
     <div
-      className='fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4'
+      className='fixed inset-0 z-50 flex items-center justify-center p-4'
       style={{ background: 'rgba(6, 14, 9, 0.7)', backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease' }}
       onClick={onClose}
     >
       <div
-        className='relative w-full max-w-sm rounded-3xl p-6 pt-7 max-h-[80vh] flex flex-col'
+        className='relative w-full max-w-sm rounded-3xl p-6 pt-7 max-h-[calc(100dvh-2rem)] flex flex-col'
         style={{
           background: 'var(--color-surface-card)',
           border: '1px solid var(--color-border)',
