@@ -1,8 +1,96 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { useTournamentData } from '../contexts/TournamentDataContext';
 import { subscribeToAllBrackets, fetchUserMatchPointsByStage } from '../services/preTournamentService';
 import { tlaLabel } from '../utils/teamLabels';
+
+const babyLabel = (g) => (g === 'girl' ? 'Niña' : g === 'boy' ? 'Niño' : '');
+
+// Winner TLA of a finished knockout match (higher score, or the penalty/tiebreaker side).
+function matchWinnerTla(m) {
+  if (!m) return null;
+  if (m.scoreA > m.scoreB) return m.tlaA;
+  if (m.scoreB > m.scoreA) return m.tlaB;
+  if (m.winner === 'home') return m.tlaA;
+  if (m.winner === 'away') return m.tlaB;
+  return null;
+}
+
+// A breakdown line with an optional secondary line (actual result / your pick vs official).
+// Points render gold when earned, muted when zero.
+function BreakdownRow({ label, sub, pts }) {
+  return (
+    <div className='flex items-center justify-between py-2' style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <div className='min-w-0 pr-2'>
+        <span className='text-sm' style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
+        {sub && <p className='text-[11px] truncate' style={{ color: 'var(--color-text-muted)' }}>{sub}</p>}
+      </div>
+      <span
+        className='text-sm font-bold tabular-nums shrink-0'
+        style={{ color: pts > 0 ? 'var(--color-gold)' : 'var(--color-text-muted)', fontFamily: 'var(--font-display)' }}
+      >
+        {pts}
+      </span>
+    </div>
+  );
+}
+
+// Tournament podium (1st / 2nd / 3rd) rows for a bracket doc. Renders nothing until the
+// final is played. Uses the stored per-slot breakdown; falls back to the aggregate if a
+// bracket was scored before the breakdown field existed (i.e. before "Recalcular Puntajes").
+function PodiumRows({ bracket, actualPodium }) {
+  if (!actualPodium?.champion) return null;
+  const b = bracket?.outcomeBreakdown;
+  return (
+    <>
+      <p className='text-[10px] font-semibold uppercase tracking-wide mt-3 mb-1' style={{ color: 'var(--color-text-muted)' }}>
+        Resultado del torneo
+      </p>
+      {b ? (
+        <>
+          <BreakdownRow label='🏆 Campeón' sub={tlaLabel(actualPodium.champion)} pts={b.champion || 0} />
+          <BreakdownRow label='🥈 Subcampeón' sub={actualPodium.runnerUp ? tlaLabel(actualPodium.runnerUp) : null} pts={b.runnerUp || 0} />
+          <BreakdownRow label='🥉 Tercer puesto' sub={actualPodium.third ? tlaLabel(actualPodium.third) : null} pts={b.third || 0} />
+        </>
+      ) : (
+        <BreakdownRow label='Campeón / Subcampeón / 3ero' pts={bracket?.tournamentOutcomePoints || 0} />
+      )}
+    </>
+  );
+}
+
+// Individual-award rows (golden boot / ball / baby) for a bracket doc, showing the
+// player's pick next to the official winner. Renders nothing until results are entered.
+function AwardRows({ bracket, official }) {
+  if (!official || (!official.goldenBoot && !official.goldenBall && !official.babyGender)) return null;
+  const b = bracket?.awardBreakdown;
+  const meta = [
+    { key: 'goldenBoot', label: '⚽ Bota de Oro', pick: bracket?.goldenBoot, actual: official.goldenBoot },
+    { key: 'goldenBall', label: '⭐ Balón de Oro', pick: bracket?.goldenBall, actual: official.goldenBall },
+    { key: 'babyGender', label: '👶 Sexo del bebé', pick: babyLabel(bracket?.babyGender), actual: babyLabel(official.babyGender) },
+  ];
+  return (
+    <>
+      <p className='text-[10px] font-semibold uppercase tracking-wide mt-3 mb-1' style={{ color: 'var(--color-text-muted)' }}>
+        Premios individuales
+      </p>
+      {b ? (
+        meta.map((m) => (
+          <BreakdownRow
+            key={m.key}
+            label={m.label}
+            sub={`Tú: ${m.pick || '—'} · Oficial: ${m.actual || '—'}`}
+            pts={b[m.key] || 0}
+          />
+        ))
+      ) : (
+        <BreakdownRow label='Bota / Balón / Bebé' pts={bracket?.awardPoints || 0} />
+      )}
+    </>
+  );
+}
 
 // Compute bonus breakdown from a preTournamentBracket doc
 function computeBonus(bracket) {
@@ -23,6 +111,10 @@ function computeBonus(bracket) {
   const totalAdv = Object.values(adv).reduce((s, v) => s + v, 0);
   return { gsp, adv, totalAdv, ksp, other };
 }
+
+// Every "additional" (non match-score) point: group standings + advancement +
+// knockout-bracket hits + tournament podium + individual awards.
+const bonusTotal = (b) => b.gsp + b.totalAdv + b.ksp + b.other;
 
 const STAGE_LABELS = {
   roundOf32: 'Ronda de 32',
@@ -275,9 +367,11 @@ const ADV_STAGES = [
   { stage: 'final',         label: 'Clasificados a Final',  trigger: 'semifinals' },
 ];
 
-function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedStages, matchPointsByStage, onClose }) {
+function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedStages, matchPointsByStage, official, actualPodium, onClose }) {
   const bonus = computeBonus(bracketData);
-  const anyBonus = bonus.gsp > 0 || bonus.totalAdv > 0 || bonus.ksp > 0;
+  const showPodium = !!actualPodium?.champion;
+  const showAwards = !!(official && (official.goldenBoot || official.goldenBall || official.babyGender));
+  const anyBonus = bonus.gsp > 0 || bonus.totalAdv > 0 || bonus.ksp > 0 || showPodium || showAwards;
 
   return (
     <div
@@ -334,6 +428,8 @@ function PlayerDetailModal({ entry, bracketData, rank, totalPlayers, finishedSta
                 ) : null
               )}
               {bonus.ksp > 0 && <Row label='Pronósticos de llave acertados' pts={bonus.ksp} gold />}
+              <PodiumRows bracket={bracketData} actualPodium={actualPodium} />
+              <AwardRows bracket={bracketData} official={official} />
             </>
           )}
         </div>
@@ -385,6 +481,23 @@ export default function LeaderboardPage() {
   } = useTournamentData();
 
   useEffect(() => subscribeToAllBrackets(setAllBrackets), []);
+
+  // Official tournament results (golden boot / ball / baby gender), set by the admin.
+  const [officialResults, setOfficialResults] = useState(null);
+  useEffect(
+    () => onSnapshot(doc(db, 'config', 'tournamentResults'), (snap) => setOfficialResults(snap.exists() ? snap.data() : null)),
+    [],
+  );
+
+  // Actual podium (champion / runner-up / 3rd place) derived from the finished matches.
+  const actualPodium = useMemo(() => {
+    const finalM = matches.find((m) => m.stage === 'final' && m.status === 'finished');
+    if (!finalM) return null;
+    const champion = matchWinnerTla(finalM);
+    const runnerUp = champion ? (champion === finalM.tlaA ? finalM.tlaB : finalM.tlaA) : null;
+    const thirdM = matches.find((m) => m.stage === 'thirdPlace' && m.status === 'finished');
+    return { champion, runnerUp, third: matchWinnerTla(thirdM) };
+  }, [matches]);
 
   // matchId → stage, so a selected player's match points can be split by stage
   const stageByMatchId = useMemo(() => {
@@ -505,14 +618,13 @@ export default function LeaderboardPage() {
     return players.reduce((best, p) => {
       const b = computeBonus(allBrackets[p.id]);
       const bestB = computeBonus(allBrackets[best?.id]);
-      return (b.gsp + b.totalAdv) > (bestB.gsp + bestB.totalAdv) ? p : best;
+      return bonusTotal(b) > bonusTotal(bestB) ? p : best;
     }, players[0]);
   }, [players, allBrackets]);
 
   const additionalLeaderTotal = useMemo(() => {
     if (!additionalLeader) return 0;
-    const b = computeBonus(allBrackets[additionalLeader.id]);
-    return b.gsp + b.totalAdv;
+    return bonusTotal(computeBonus(allBrackets[additionalLeader.id]));
   }, [additionalLeader, allBrackets]);
 
   return (
@@ -770,12 +882,17 @@ export default function LeaderboardPage() {
                 </div>
               )}
 
+              {/* Tournament podium (1st / 2nd / 3rd) and individual awards */}
+              <PodiumRows bracket={myBracket} actualPodium={actualPodium} />
+              <AwardRows bracket={myBracket} official={officialResults} />
+
               {/* Grand total */}
               <div className='flex items-center justify-between pt-2 mt-1' style={{ borderTop: '1px solid var(--color-border)' }}>
                 <span className='text-sm font-semibold' style={{ color: 'var(--color-gold)' }}>Total adicionales</span>
                 <div className='flex flex-col items-end leading-none'>
                   <span className='text-lg font-bold tabular-nums' style={{ color: 'var(--color-gold)', fontFamily: 'var(--font-display)' }}>
-                    {bonusPoints.totalGsp + bonusPoints.totalAdv + bonusPoints.ksp}
+                    {bonusPoints.totalGsp + bonusPoints.totalAdv + bonusPoints.ksp +
+                      (myBracket?.tournamentOutcomePoints || 0) + (myBracket?.awardPoints || 0)}
                   </span>
                   <span className='text-[10px] mt-0.5' style={{ color: 'var(--color-text-muted)' }}>pts</span>
                 </div>
@@ -859,6 +976,8 @@ export default function LeaderboardPage() {
             totalPlayers={players.length}
             finishedStages={finishedStages}
             matchPointsByStage={matchPointsByStage}
+            official={officialResults}
+            actualPodium={actualPodium}
             onClose={() => setSelectedPlayer(null)}
           />
         );

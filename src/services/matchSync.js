@@ -838,6 +838,8 @@ async function calculateTournamentOutcomePoints() {
 
     let points = 0;
     const tc = scoring.tournamentOutcome;
+    // Per-slot breakdown so the UI can show who scored the 1st / 2nd / 3rd place.
+    const breakdown = { champion: 0, runnerUp: 0, third: 0 };
 
     const resolved = resolvedByUser[userId];
     if (resolved) {
@@ -847,12 +849,12 @@ async function calculateTournamentOutcomePoints() {
       const runnerUp = champion ? (champion === f.home?.tla ? f.away?.tla : f.home?.tla) : null;
       const third = resolved['3rd']?.winner || null;
 
-      if (champion && champion === actualChampion) points += tc.correctChampion;
-      if (runnerUp && runnerUp === actualRunnerUp) points += tc.correctRunnerUp;
-      if (third && third === actual3rd) points += tc.correct3rdPlace;
+      if (champion && champion === actualChampion) { breakdown.champion = tc.correctChampion; points += tc.correctChampion; }
+      if (runnerUp && runnerUp === actualRunnerUp) { breakdown.runnerUp = tc.correctRunnerUp; points += tc.correctRunnerUp; }
+      if (third && third === actual3rd) { breakdown.third = tc.correct3rdPlace; points += tc.correct3rdPlace; }
     }
 
-    batch.update(bracketDoc.ref, { tournamentOutcomePoints: points });
+    batch.update(bracketDoc.ref, { tournamentOutcomePoints: points, outcomeBreakdown: breakdown });
     affectedUserIds.add(userId);
   });
 
@@ -1014,6 +1016,20 @@ async function recalcUsers(userIds, matchResults) {
 // "Recalcular puntajes" action — also backfills the correctos/DG counts onto users
 // whose matches were scored before those fields existed.
 export async function recalculateAllUsers() {
+  // Re-apply the podium (champion / runner-up / 3rd) scoring so its per-slot breakdown
+  // is (re)written with the current logic. No-op until the final & 3rd-place both finish.
+  await calculateTournamentOutcomePoints();
+
+  // Re-apply the individual-award scoring from the stored official results, so the
+  // last-name matching and per-award breakdown are (re)written for everyone.
+  const resultsSnap = await getDoc(doc(db, 'config', 'tournamentResults'));
+  if (resultsSnap.exists()) {
+    const r = resultsSnap.data();
+    if (r.goldenBoot || r.goldenBall || r.babyGender) {
+      await calculateAwardPoints(r.goldenBoot || '', r.goldenBall || '', r.babyGender || '');
+    }
+  }
+
   const matchResults = await loadMatchResults();
   const usersSnap = await getDocs(collection(db, 'users'));
   const ids = usersSnap.docs.map((d) => d.id);
@@ -1100,19 +1116,37 @@ function normalizePlayerName(name) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+// Split a name into normalized word tokens (accent/punctuation-insensitive), dropping
+// single-letter tokens like initials ("M." in "M. Salah").
+function nameTokens(name) {
+  return normalizePlayerName(name)
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2);
+}
+
+// Fuzzy match for player-award names. People often enter only a surname while the
+// official winner is a full name (or vice-versa), so we treat two names as the same
+// player when the LAST token of either appears among the other's tokens \u2014 i.e. they
+// share a surname. "Mbappe" matches "Kylian Mbapp\u00e9"; "Kylian D\u00edaz" does not.
+function lastNameMatches(a, b) {
+  const ta = nameTokens(a);
+  const tb = nameTokens(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+  const lastA = ta[ta.length - 1];
+  const lastB = tb[tb.length - 1];
+  return tb.includes(lastA) || ta.includes(lastB);
+}
+
 // Award points for correctly predicting Golden Boot / Golden Ball winners.
 // Called by admin after FIFA announces the awards.
 // Saves actual winners to config/tournamentResults and scores all users.
-// Comparison is accent-insensitive and case-insensitive.
+// Boot/ball comparison is accent-, case- and first-name-insensitive (matches on surname).
 export async function calculateAwardPoints(goldenBoot, goldenBall, babyGender = '') {
   await setDoc(
     doc(db, 'config', 'tournamentResults'),
     { goldenBoot, goldenBall, babyGender, updatedAt: Timestamp.now() },
     { merge: true },
   );
-
-  const normBoot = normalizePlayerName(goldenBoot);
-  const normBall = normalizePlayerName(goldenBall);
 
   const bracketSnap = await getDocs(collection(db, 'preTournamentBracket'));
   const batch = writeBatch(db);
@@ -1124,17 +1158,24 @@ export async function calculateAwardPoints(goldenBoot, goldenBall, babyGender = 
     if (!userId) return;
 
     let points = 0;
-    if (normBoot && normalizePlayerName(data.goldenBoot) === normBoot) {
+    // Per-award breakdown so the UI can show which of boot / ball / baby scored.
+    const breakdown = { goldenBoot: 0, goldenBall: 0, babyGender: 0 };
+    // Boot & ball match on surname (people rarely type the full official name);
+    // baby gender is an exact enum match.
+    if (goldenBoot && lastNameMatches(data.goldenBoot, goldenBoot)) {
+      breakdown.goldenBoot = scoring.individualAwards.goldenBoot;
       points += scoring.individualAwards.goldenBoot;
     }
-    if (normBall && normalizePlayerName(data.goldenBall) === normBall) {
+    if (goldenBall && lastNameMatches(data.goldenBall, goldenBall)) {
+      breakdown.goldenBall = scoring.individualAwards.goldenBall;
       points += scoring.individualAwards.goldenBall;
     }
     if (babyGender && data.babyGender === babyGender) {
+      breakdown.babyGender = scoring.individualAwards.babyGender;
       points += scoring.individualAwards.babyGender;
     }
 
-    batch.update(bracketDoc.ref, { awardPoints: points });
+    batch.update(bracketDoc.ref, { awardPoints: points, awardBreakdown: breakdown });
     affectedUserIds.add(userId);
   });
 
